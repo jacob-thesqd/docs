@@ -1,110 +1,120 @@
-# 🏒 Draft Date Fixer
-```active```
-
-This workflow, named "Draft Date Fixer," is designed to calculate a future "next business day" based on a provided submission date and a number of days. It is triggered by an incoming HTTP webhook, processes the input to add a specified number of business days (excluding weekends) to the submission date, and then responds with the calculated date formatted to 18:00.
+---
+title: "🏒 Draft Date Fixer"
+description: "This workflow, named "Draft Date Fixer," is designed to calculate a future "next business day" based on a provided submission date and a number of days. It is triggered by an incoming HTTP webhook, processes the input to add a specified number of business days (excluding weekends) to the submission date, and then responds with the calculated date formatted to 18:00."
+sidebarTitle: "🏒 Draft Date Fixer"
+---
 
 ## Webhook (Trigger Node)
+
 This node acts as the entry point for the workflow, listening for incoming HTTP requests on a specific path.
 
 ### Parameters
-*   **Path**
-    *   Value: `draftdate2`
-*   **Response Mode**
-    *   Value: `Response Node`
+
+- **Path**
+  - Value: `draftdate2`
+- **Response Mode**
+  - Value: `Response Node`
 
 ## Edit Fields (Set Node)
+
 This node modifies the incoming data by extracting and transforming specific fields from the webhook body before further processing.
 
 ### Parameters
-*   **Submission Date**
-    *   Name: `Submission Date`
-    *   Value: ```{{ $json.body.submission_date }}```
-*   **days out**
-    *   Name: `days out`
-    *   Value: ```{{ Number($json.body['days out']) + 1 }}```
+
+- **Submission Date**
+  - Name: `Submission Date`
+  - Value: `{{ $json.body.submission_date }}`
+- **days out**
+  - Name: `days out`
+  - Value: `{{ Number($json.body['days out']) + 1 }}`
 
 ## Code (Code Node)
+
 This node executes custom JavaScript code to calculate the "next business day" by adding a specified number of business days (excluding weekends) to a given submission date and setting the time to 18:00.
 
 ### Parameters
-*   **JS Code**
-    *   Value:
-        ```javascript
-        // Get input data from the previous node
-        const items = $input.all();
 
-        // Helper function to calculate the next business day
-        function addBusinessDays(date, days) {
-            const newDate = new Date(date); // Create a copy to avoid modifying original
-            let businessDaysCount = 0;
-            while (businessDaysCount < days) {
-                newDate.setDate(newDate.getDate() + 1);
-                // Only count weekdays (Monday to Friday)
-                if (newDate.getDay() !== 0 && newDate.getDay() !== 6) {
-                    businessDaysCount++;
+- **JS Code**
+  - Value:
+
+    ```javascript
+    // Get input data from the previous node
+    const items = $input.all();
+    
+    // Helper function to calculate the next business day
+    function addBusinessDays(date, days) {
+        const newDate = new Date(date); // Create a copy to avoid modifying original
+        let businessDaysCount = 0;
+        while (businessDaysCount < days) {
+            newDate.setDate(newDate.getDate() + 1);
+            // Only count weekdays (Monday to Friday)
+            if (newDate.getDay() !== 0 && newDate.getDay() !== 6) {
+                businessDaysCount++;
+            }
+        }
+        return newDate;
+    }
+    
+    // Helper function to format date to string with time set to 18:00
+    function formatDateAt1800(date) {
+        const newDate = new Date(date);
+        newDate.setHours(18, 0, 0, 0); // Set time to 18:00:00.000
+    
+        // Format date as YYYY-MM-DD HH:mm:ss
+        return newDate.toISOString().slice(0, 19);
+    }
+    
+    // Process each item dynamically
+    const output = items.map(item => {
+        const submissionDateStr = item.json["Submission Date"];
+        const daysOut = item.json["days out"];
+    
+        // Ensure Submission Date and days out are valid
+        if (!submissionDateStr || isNaN(daysOut)) {
+            return {
+                json: {
+                    "Submission Date": submissionDateStr || null,
+                    "days out": daysOut || null,
+                    "Next Business Day": null
                 }
-            }
-            return newDate;
+            };
         }
-
-        // Helper function to format date to string with time set to 18:00
-        function formatDateAt1800(date) {
-            const newDate = new Date(date);
-            newDate.setHours(18, 0, 0, 0); // Set time to 18:00:00.000
-
-            // Format date as YYYY-MM-DD HH:mm:ss
-            return newDate.toISOString().slice(0, 19);
-        }
-
-        // Process each item dynamically
-        const output = items.map(item => {
-            const submissionDateStr = item.json["Submission Date"];
-            const daysOut = item.json["days out"];
-
-            // Ensure Submission Date and days out are valid
-            if (!submissionDateStr || isNaN(daysOut)) {
-                return {
-                    json: {
-                        "Submission Date": submissionDateStr || null,
-                        "days out": daysOut || null,
-                        "Next Business Day": null
-                    }
-                };
-            }
-
-            const submissionDate = new Date(submissionDateStr);
-
-            // Check if the date is valid
-            if (isNaN(submissionDate)) {
-                return {
-                    json: {
-                        "Submission Date": submissionDateStr,
-                        "days out": daysOut,
-                        "Next Business Day": null
-                    }
-                };
-            }
-
-            const nextBusinessDay = addBusinessDays(submissionDate, daysOut);
-
+    
+        const submissionDate = new Date(submissionDateStr);
+    
+        // Check if the date is valid
+        if (isNaN(submissionDate)) {
             return {
                 json: {
                     "Submission Date": submissionDateStr,
                     "days out": daysOut,
-                    "Next Business Day": formatDateAt1800(nextBusinessDay)
+                    "Next Business Day": null
                 }
             };
-        });
-
-        // Return the result to be used in the next node
-        return output;
-        ```
+        }
+    
+        const nextBusinessDay = addBusinessDays(submissionDate, daysOut);
+    
+        return {
+            json: {
+                "Submission Date": submissionDateStr,
+                "days out": daysOut,
+                "Next Business Day": formatDateAt1800(nextBusinessDay)
+            }
+        };
+    });
+    
+    // Return the result to be used in the next node
+    return output;
+    ```
 
 ## Respond to Webhook (Respond to Webhook Node)
+
 This node sends a JSON response back to the original webhook caller, containing the processed data from the previous nodes.
 
 ### Parameters
-*   **Respond With**
-    *   Value: `JSON`
-*   **Response Body**
-    *   Value: ```{{ JSON.stringify($json) }}```
+
+- **Respond With**
+  - Value: `JSON`
+- **Response Body**
+  - Value: `{{ JSON.stringify($json) }}`
