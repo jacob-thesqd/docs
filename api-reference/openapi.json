@@ -1,8 +1,8 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "AA Trigger V2",
-    "description": "API specification for AA Trigger V2",
+    "title": "Church Media Squad API",
+    "description": "Combined API specification for Church Media Squad services including AA Trigger V2, SQDFiles General Submissions, and Strategy Markups",
     "version": "1.0.0",
     "license": {
       "name": "MIT"
@@ -11,7 +11,15 @@
   "servers": [
     {
       "url": "https://sis1.thesqd.com",
-      "description": "Production server"
+      "description": "SIS1 Production Server"
+    },
+    {
+      "url": "https://sis2.thesqd.com",
+      "description": "SIS2 Production Server"
+    },
+    {
+      "url": "https://sisx.thesqd.com",
+      "description": "SISX Production Server"
     }
   ],
   "security": [
@@ -22,6 +30,12 @@
   "paths": {
     "/aa-trigger": {
       "post": {
+        "servers": [
+          {
+            "url": "https://sisx.thesqd.com",
+            "description": "SISX Production Server"
+          }
+        ],
         "summary": "Execute AA Trigger V2 workflow",
         "description": "Triggers the AA Trigger V2 workflow via webhook",
         "operationId": "execute_aa_trigger",
@@ -71,7 +85,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Error"
+                  "$ref": "#/components/schemas/SuccessResponse"
                 }
               }
             }
@@ -98,14 +112,20 @@
           }
         },
         "tags": [
-          "Workflow"
+          "AA Trigger V2"
         ]
       }
     },
     "/aa-trigger-retry": {
       "post": {
-        "summary": "Execute AA Trigger V2 workflow",
-        "description": "Triggers the AA Trigger V2 workflow via webhook",
+        "servers": [
+          {
+            "url": "https://sisx.thesqd.com",
+            "description": "SISX Production Server"
+          }
+        ],
+        "summary": "Execute AA Trigger V2 workflow with retry",
+        "description": "Triggers the AA Trigger V2 workflow via webhook with retry capability",
         "operationId": "execute_aa_trigger_retry",
         "requestBody": {
           "description": "Workflow input data",
@@ -153,7 +173,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Error"
+                  "$ref": "#/components/schemas/SuccessResponse"
                 }
               }
             }
@@ -180,13 +200,232 @@
           }
         },
         "tags": [
-          "Workflow"
+          "AA Trigger V2"
+        ]
+      }
+    },
+    "/general-submission-processor": {
+      "post": {
+        "servers": [
+          {
+            "url": "https://sis2.thesqd.com",
+            "description": "SIS2 Production Server"
+          }
+        ],
+        "summary": "Execute SQDFiles General Submissions workflow",
+        "description": "Triggers the SQDFiles General Submissions workflow via webhook",
+        "operationId": "execute_general_submission_processor",
+        "requestBody": {
+          "description": "Workflow input data",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "submission_date": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "The submission date for calculation"
+                  },
+                  "days out": {
+                    "type": "string",
+                    "description": "Number of business days to add"
+                  }
+                },
+                "required": [
+                  "submission_date",
+                  "days out"
+                ]
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "submission_date": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "days out": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful workflow execution",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "SQDFiles General Submissions"
+        ]
+      }
+    },
+    "/markup-created": {
+      "post": {
+        "servers": [
+          {
+            "url": "https://sis1.thesqd.com",
+            "description": "SIS1 Production Server"
+          }
+        ],
+        "summary": "Execute Strategy Markups workflow",
+        "description": "Triggers the Strategy Markups workflow via webhook",
+        "operationId": "execute_markup_created",
+        "requestBody": {
+          "description": "Workflow input data",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "submission_date": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "The submission date for calculation"
+                  },
+                  "days out": {
+                    "type": "string",
+                    "description": "Number of business days to add"
+                  }
+                },
+                "required": [
+                  "submission_date",
+                  "days out"
+                ]
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "submission_date": {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  "days out": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful workflow execution",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Strategy Markups"
         ]
       }
     }
   },
   "components": {
     "schemas": {
+      "SuccessResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "Indicates successful execution"
+          },
+          "message": {
+            "type": "string",
+            "description": "Success message"
+          },
+          "data": {
+            "type": "object",
+            "description": "Response data"
+          }
+        },
+        "required": [
+          "success",
+          "message"
+        ]
+      },
+      "WorkflowInput1": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "name field"
+          },
+          "id": {
+            "type": "string",
+            "description": "id field"
+          },
+          "created": {
+            "type": "string",
+            "description": "created field"
+          }
+        },
+        "required": [
+          "name",
+          "id",
+          "created"
+        ]
+      },
       "WorkflowInput2": {
         "type": "object",
         "properties": {
@@ -289,8 +528,16 @@
   },
   "tags": [
     {
-      "name": "Workflow",
-      "description": "N8N workflow operations"
+      "name": "AA Trigger V2",
+      "description": "AA Trigger V2 workflow operations"
+    },
+    {
+      "name": "SQDFiles General Submissions",
+      "description": "SQDFiles General Submissions workflow operations"
+    },
+    {
+      "name": "Strategy Markups",
+      "description": "Strategy Markups workflow operations"
     }
   ]
 }

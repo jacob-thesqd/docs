@@ -1,0 +1,211 @@
+---
+title: '🏒 SQDFiles General Submissions 🟢'
+description: 'The SQDFiles General Submissions workflow automates the process of creating organized Dropbox folders for general submissions and uploading associated client assets. This workflow processes incoming submissions, creates structured folder hierarchies, and handles file uploads with comprehensive error handling and database tracking.'
+---
+
+## Workflow Details
+
+- **Workflow ID**: `MD6SC5o9EW8zLDJk`
+- **Server**: sis2 (https://sis2.thesqd.com)
+- **Status**: Active
+- **Created**: July 9, 2025
+- **Last Updated**: July 11, 2025
+- **Tags**: SQDFiles, Dropbox 2.0
+
+## Webhook Endpoint
+
+```
+POST https://sis2.thesqd.com/general-submission-processor
+```
+
+## Workflow Process
+
+### 1. General Submission Webhook (Entry Point)
+- **Path**: `/general-submission-processor`
+- **Method**: POST
+- **Trigger**: Hookdeck insert/update changes to `prf_general_submissions`
+- **Response**: No data returned (lastNode mode)
+
+### 2. Filtering Pipeline
+
+#### Exists in Client Archives?
+Filters submissions to ensure they haven't been processed:
+- **Condition**: `dropbox_folder_path_2` does NOT start with `/Client Archives/`
+
+#### Folder Created? Folder Number?
+Validates submission readiness:
+- **Condition 1**: `folder_created_2` field is empty
+- **Condition 2**: `seq_folder_number` is not empty
+
+### 3. Database Operations
+
+#### Retrieve Dropbox API Key
+- **Source**: PostgreSQL database (SquadData - N. Cal Replica)
+- **Schema**: `vault.decrypted_secrets`
+- **Query**: Retrieves decrypted secret by ID `2b5d8b48-77b6-4d55-8753-c3dc344f1c9b`
+
+#### Update prf_general_submissions
+- **Table**: `public.prf_general_submissions`
+- **Operation**: Update record by `submission_id`
+- **Updated Fields**:
+  - `folder_created_2`: Current timestamp
+  - `dropbox_folder_id_2`: New folder ID from Dropbox
+  - `dropbox_folder_path_2`: Full folder path
+
+### 4. Dropbox Integration
+
+#### Create General Submission Project Folder
+- **API Endpoint**: `https://api.dropboxapi.com/2/files/create_folder_v2`
+- **Method**: POST
+- **Retry Policy**: 5 attempts with retry on fail
+- **Folder Structure**: `/Client Archives/{memberid} - {church_name}/{seq_folder_number} - {projectTitle}`
+
+**Headers**:
+- `Authorization`: Bearer token from retrieved API key
+- `Dropbox-API-Select-User`: `dbmid:AAAHEu7mbtnr5hPFM5Vf1sf_WXFqCw3J33g`
+- `Dropbox-API-Path-Root`: `{"tag": "root", "root": "2562687859"}`
+
+#### Create Client Assets Folder
+- **Subfolder**: `0. Client Assets`
+- **Location**: Inside the project folder
+- **Purpose**: Organize client-provided files
+
+### 5. File Processing Pipeline
+
+#### Extract General Files (Code Node)
+Sophisticated file extraction logic that handles multiple data formats:
+
+**Supported Formats**:
+- **localStorage Structure**: `raw_data.localStorage.squadPortal_appState.creativeDirection.uploadedImages`
+- **Direct creativeDirection**: `creativeDirection.inspo` array with image URLs
+- **uploadedImages Array**: `creativeDirection.uploadedImages`
+- **Submission Questions**: FileUpload type questions
+- **Fallback Scanning**: Automatically detects image URLs in raw data
+
+**File Types Detected**:
+- `.jpg`, `.jpeg`, `.png`, `.gif`, `.webp`, `.svg`
+- URLs containing "image" or "upload"
+
+#### Separate General Files (Split Out)
+- **Function**: Splits file array into individual items
+- **Field**: `fileUploads`
+- **Result**: Each file becomes a separate workflow item
+
+#### Upload General Files
+- **Endpoint**: `https://isccrtvuk2ca56ghkehtbdls2m0acpoh.lambda-url.us-east-2.on.aws/`
+- **Method**: POST
+- **Batch Size**: 1 (processes files one at a time)
+- **Continue on Error**: Yes
+
+**Parameters**:
+- `key`: Dropbox API key
+- `file`: File URL to upload
+- `path`: Destination folder path
+
+### 6. Error Handling
+
+#### New Folder Fail Alert
+- **Trigger**: Folder creation failure
+- **Channel**: Slack alert to `<@U07C086NY06>`
+- **Message**: "Error creating general submission folder"
+- **Workflow Link**: Included for troubleshooting
+
+#### New Files Fail Alert
+- **Trigger**: File upload failure
+- **Channel**: Slack alert to `<@U07C086NY06>`
+- **Message**: "Error uploading client assets for general submission"
+- **Workflow Link**: Included for troubleshooting
+
+## Data Flow
+
+```
+Webhook → Filter (Client Archives) → Filter (Folder Status) → 
+Get API Key → Create Project Folder → Update Database → 
+Create Assets Folder → Extract Files → Split Files → Upload Files
+```
+
+## Authentication & Credentials
+
+### PostgreSQL Database
+- **Primary**: SquadData (Joac7j8e68XE8Jgg)
+- **Replica**: SquadData - N. Cal Replica (6CQSleYNcwodzQeI)
+
+### Slack Notifications
+- **Primary**: Norman the Squad Notifier (N8CXMU19kZoK22Rh)
+- **Secondary**: Tiglath-Pileser the 2.0 Trumpeter (QaL9UrLzGc4JG5mY)
+
+### Dropbox API
+- **Authentication**: Bearer token from encrypted vault
+- **Team Account**: Specified via API headers
+- **Root Access**: Team root directory
+
+## Usage Examples
+
+### Webhook Payload Structure
+```json
+{
+  "body": {
+    "record": {
+      "submission_id": "sub_12345",
+      "seq_folder_number": "001",
+      "dropbox_folder_path_2": null,
+      "folder_created_2": null,
+      "raw_data": {
+        "selectedChurch": {
+          "memberid": "1234",
+          "church_name": "Sample Church"
+        },
+        "generalInfo": {
+          "projectTitle": "Sunday Service Graphics"
+        },
+        "creativeDirection": {
+          "inspo": [
+            {
+              "image": "https://example.com/image1.jpg",
+              "description": "Style inspiration"
+            }
+          ]
+        }
+      }
+    }
+  }
+}
+```
+
+### Folder Structure Created
+```
+/Client Archives/
+├── 1234 - Sample Church/
+    └── 001 - Sunday Service Graphics/
+        └── 0. Client Assets/
+            ├── image1.jpg
+            └── image2.png
+```
+
+## Error Workflow
+
+- **Error Workflow ID**: `Wm8a8MNMHA7QSrKU`
+- **Execution Order**: v1
+- **Slack Integration**: Immediate notifications for critical failures
+
+## Performance & Reliability
+
+- **Retry Policy**: 5 attempts for critical HTTP operations
+- **Batch Processing**: Files processed individually to prevent memory issues
+- **Database Transactions**: Atomic updates with rollback capability
+- **Error Isolation**: Continue processing even if individual files fail
+
+## Monitoring & Alerts
+
+- **Trigger Count**: 1 (active webhook)
+- **Slack Alerts**: Real-time failure notifications
+- **Database Logging**: Complete audit trail in PostgreSQL
+- **Lambda Monitoring**: File upload success/failure tracking
+
+## Notes
+
+- **Autorename**: Enabled for folder creation to handle naming conflicts
+- **File Deduplication**: Handled at the Lambda level
+- **Path Validation**: Robust filtering prevents duplicate processing
+- **Multi-format Support**: Handles various submission data structures
+- **Scalable Architecture**: Lambda-based file processing for high throughput

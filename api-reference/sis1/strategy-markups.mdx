@@ -1,0 +1,108 @@
+---
+title: 'New Strategy Markups Workflow'
+description: 'The Strategy Markups workflow is an automated system that processes markup data from Markup.io and synchronizes it with Airtable. This workflow runs on the **sis1** server and is designed to handle strategy markup submissions and track them in a centralized database.'
+---
+
+## Workflow Details
+
+- **Workflow ID**: `8XDGmxKszVmnbILH`
+- **Server**: sis1 (https://sis1.thesqd.com)
+- **Status**: Active
+- **Created**: June 9, 2025
+- **Last Updated**: July 11, 2025
+
+## Webhook Endpoint
+
+```
+POST https://sis1.thesqd.com/markup-created
+```
+
+## Workflow Process
+
+### 1. Webhook Trigger
+- **Path**: `/markup-created`
+- **Method**: POST
+- **Purpose**: Receives notifications when new markups are created
+
+### 2. Markup.io API Integration
+- **Endpoint**: `https://api.markup.io/api/v1/folder/65381b1f-6d09-4cc7-ba9d-17070872e440/items`
+- **Method**: GET
+- **Parameters**:
+  - `order`: activity
+  - `includeAncestors`: 0
+- **Headers**:
+  - `Authorization`: Bearer token authentication
+  - `Markup-API-Version`: 25
+  - `accept`: */*
+
+### 3. Data Processing Pipeline
+
+#### Split Out
+- Extracts individual items from the API response data array
+
+#### Filter Criteria
+The workflow filters markups based on:
+- **Numeric Value**: Name must contain a number greater than 1
+- **Template Exclusion**: Name must not contain "template" (case-insensitive)
+
+#### Field Mapping
+Transforms the data to include:
+- **name**: Original markup name
+- **id**: Markup ID
+- **created**: Formatted creation date (YYYY-MM-DD)
+
+### 4. Airtable Integration
+
+#### Database Details
+- **Base**: Strategy (appjHSW7sGtitxoHf)
+- **Table**: Markups (tblKr6Q3zf6J7umBk)
+- **Operation**: Upsert (update if exists, insert if new)
+
+#### Field Mapping
+| Airtable Field | Source Data |
+|---|---|
+| ID | Markup ID |
+| Name | Markup name |
+| Account | Extracted number from name |
+| Created | Formatted creation date |
+
+#### Matching Logic
+- Uses the `ID` field to match existing records
+- Prevents duplicates by updating existing entries
+
+### 5. Data Merge
+- Combines the processed data with Airtable results
+- Maintains data integrity across both systems
+- Uses `keepNonMatches` to preserve all records
+
+## Data Flow
+
+```
+Webhook Trigger → Markup.io API → Split Data → Filter → Transform → Airtable Upsert → Merge Results
+```
+
+## Error Handling
+
+- **Error Workflow**: HoNEdY8vzB1kaQq5
+- **Execution Order**: v1
+- **Continue on Error**: Enabled for Airtable operations
+
+## Authentication
+
+### Markup.io API
+- **Type**: Bearer Token
+- **Header**: Authorization
+- **Token**: JWT-based authentication
+
+### Airtable
+- **Type**: Personal Access Token
+- **Credential ID**: 8g0HLMhmA4W1bU3M
+
+## Usage Examples
+
+### Webhook Payload
+When a new markup is created, the webhook receives a POST request that triggers the workflow to:
+
+1. Fetch the latest markups from the specified folder
+2. Process only non-template markups with valid account numbers
+3. Sync the data to Airtable for tracking and ma

@@ -58,8 +58,35 @@
           {
             "group": "SIS1",
             "pages": [
-              "api-reference/sis1/aa-trigger",
-              "api-reference/sis1/aa-trigger-retry"
+              "api-reference/sis1/strategy-markups"
+            ]
+          },
+                    {
+            "group": "SIS2",
+            "pages": [
+              "api-reference/sis2/sqd-files-general-submissions"
+            ]
+          },
+                    {
+            "group": "SISX",
+            "pages": [
+              "api-reference/sisx/aa-trigger",
+              "api-reference/sisx/aa-trigger-retry"
+            ]
+          },
+                    {
+            "group": "CLOUD",
+            "pages": [
+            ]
+          },
+                    {
+            "group": "SUPABASE",
+            "pages": [
+            ]
+          },
+          {
+            "group": "Windmill",
+            "pages": [
             ]
           }
         ]
