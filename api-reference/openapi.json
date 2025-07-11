@@ -45,36 +45,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "submission_date": {
-                    "type": "string",
-                    "format": "date-time",
-                    "description": "The submission date for calculation"
-                  },
-                  "days out": {
-                    "type": "string",
-                    "description": "Number of business days to add"
-                  }
-                },
-                "required": [
-                  "submission_date",
-                  "days out"
-                ]
-              }
-            },
-            "multipart/form-data": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "submission_date": {
-                    "type": "string",
-                    "format": "date-time"
-                  },
-                  "days out": {
-                    "type": "string"
-                  }
-                }
+                "$ref": "#/components/schemas/AATriggerRequest"
               }
             }
           }
@@ -133,36 +104,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "submission_date": {
-                    "type": "string",
-                    "format": "date-time",
-                    "description": "The submission date for calculation"
-                  },
-                  "days out": {
-                    "type": "string",
-                    "description": "Number of business days to add"
-                  }
-                },
-                "required": [
-                  "submission_date",
-                  "days out"
-                ]
-              }
-            },
-            "multipart/form-data": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "submission_date": {
-                    "type": "string",
-                    "format": "date-time"
-                  },
-                  "days out": {
-                    "type": "string"
-                  }
-                }
+                "$ref": "#/components/schemas/AATriggerRequest"
               }
             }
           }
@@ -213,44 +155,15 @@
           }
         ],
         "summary": "Execute SQDFiles General Submissions workflow",
-        "description": "Triggers the SQDFiles General Submissions workflow via webhook",
+        "description": "Triggers the SQDFiles General Submissions workflow via webhook. Processes general submissions and creates organized Dropbox folders with file uploads.",
         "operationId": "execute_general_submission_processor",
         "requestBody": {
-          "description": "Workflow input data",
+          "description": "General submission data from Hookdeck",
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "submission_date": {
-                    "type": "string",
-                    "format": "date-time",
-                    "description": "The submission date for calculation"
-                  },
-                  "days out": {
-                    "type": "string",
-                    "description": "Number of business days to add"
-                  }
-                },
-                "required": [
-                  "submission_date",
-                  "days out"
-                ]
-              }
-            },
-            "multipart/form-data": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "submission_date": {
-                    "type": "string",
-                    "format": "date-time"
-                  },
-                  "days out": {
-                    "type": "string"
-                  }
-                }
+                "$ref": "#/components/schemas/GeneralSubmissionRequest"
               }
             }
           }
@@ -301,44 +214,15 @@
           }
         ],
         "summary": "Execute Strategy Markups workflow",
-        "description": "Triggers the Strategy Markups workflow via webhook",
+        "description": "Triggers the Strategy Markups workflow via webhook. Processes markup data from Markup.io and synchronizes it with Airtable.",
         "operationId": "execute_markup_created",
         "requestBody": {
-          "description": "Workflow input data",
+          "description": "Markup creation notification",
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "submission_date": {
-                    "type": "string",
-                    "format": "date-time",
-                    "description": "The submission date for calculation"
-                  },
-                  "days out": {
-                    "type": "string",
-                    "description": "Number of business days to add"
-                  }
-                },
-                "required": [
-                  "submission_date",
-                  "days out"
-                ]
-              }
-            },
-            "multipart/form-data": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "submission_date": {
-                    "type": "string",
-                    "format": "date-time"
-                  },
-                  "days out": {
-                    "type": "string"
-                  }
-                }
+                "$ref": "#/components/schemas/MarkupCreatedRequest"
               }
             }
           }
@@ -383,41 +267,128 @@
   },
   "components": {
     "schemas": {
-      "SuccessResponse": {
+      "AATriggerRequest": {
         "type": "object",
         "properties": {
-          "success": {
-            "type": "boolean",
-            "description": "Indicates successful execution"
-          },
-          "message": {
+          "submission_date": {
             "type": "string",
-            "description": "Success message"
+            "format": "date-time",
+            "description": "The submission date for calculation",
+            "example": "2025-07-11T10:00:00Z"
           },
-          "data": {
-            "type": "object",
-            "description": "Response data"
+          "days out": {
+            "type": "string",
+            "description": "Number of business days to add",
+            "example": "5"
           }
         },
         "required": [
-          "success",
-          "message"
+          "submission_date",
+          "days out"
         ]
       },
-      "WorkflowInput1": {
+      "GeneralSubmissionRequest": {
+        "type": "object",
+        "properties": {
+          "body": {
+            "type": "object",
+            "properties": {
+              "record": {
+                "type": "object",
+                "properties": {
+                  "submission_id": {
+                    "type": "string",
+                    "description": "Unique submission identifier"
+                  },
+                  "seq_folder_number": {
+                    "type": "string",
+                    "description": "Sequential folder number"
+                  },
+                  "dropbox_folder_path_2": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Dropbox folder path (null for new submissions)"
+                  },
+                  "folder_created_2": {
+                    "type": "string",
+                    "nullable": true,
+                    "description": "Folder creation timestamp (null for new submissions)"
+                  },
+                  "raw_data": {
+                    "type": "object",
+                    "properties": {
+                      "selectedChurch": {
+                        "type": "object",
+                        "properties": {
+                          "memberid": {
+                            "type": "string",
+                            "description": "Church member ID"
+                          },
+                          "church_name": {
+                            "type": "string",
+                            "description": "Church name"
+                          }
+                        }
+                      },
+                      "generalInfo": {
+                        "type": "object",
+                        "properties": {
+                          "projectTitle": {
+                            "type": "string",
+                            "description": "Project title"
+                          }
+                        }
+                      },
+                      "creativeDirection": {
+                        "type": "object",
+                        "properties": {
+                          "inspo": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "image": {
+                                  "type": "string",
+                                  "description": "Image URL"
+                                },
+                                "description": {
+                                  "type": "string",
+                                  "description": "Image description"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "required": [
+          "body"
+        ]
+      },
+      "MarkupCreatedRequest": {
         "type": "object",
         "properties": {
           "name": {
             "type": "string",
-            "description": "name field"
+            "description": "Markup name",
+            "example": "Account 1234 - Project Name"
           },
           "id": {
             "type": "string",
-            "description": "id field"
+            "description": "Markup ID",
+            "example": "markup-id-123"
           },
           "created": {
             "type": "string",
-            "description": "created field"
+            "format": "date-time",
+            "description": "Creation timestamp",
+            "example": "2025-07-11T17:13:30.991Z"
           }
         },
         "required": [
@@ -426,77 +397,28 @@
           "created"
         ]
       },
-      "WorkflowInput2": {
+      "SuccessResponse": {
         "type": "object",
         "properties": {
-          "status": {
-            "type": "string",
-            "description": "status field"
-          },
-          "queue_num": {
-            "type": "number",
-            "description": "queue_num field"
-          },
-          "account": {
-            "type": "number",
-            "description": "account field"
-          }
-        },
-        "required": [
-          "status",
-          "queue_num",
-          "account"
-        ]
-      },
-      "WorkflowInput3": {
-        "type": "object",
-        "properties": {
-          "=workflow_id": {
-            "type": "string",
-            "description": "=workflow_id field"
-          },
-          "=execution_id": {
-            "type": "string",
-            "description": "=execution_id field"
-          },
-          "status": {
-            "type": "string",
-            "description": "status field"
-          }
-        },
-        "required": [
-          "=workflow_id",
-          "=execution_id",
-          "status"
-        ]
-      },
-      "WorkflowInput4": {
-        "type": "object",
-        "properties": {
-          "body": {
-            "type": "string",
-            "description": "body field"
-          }
-        },
-        "required": [
-          "body"
-        ]
-      },
-      "WorkflowInput5": {
-        "type": "object",
-        "properties": {
-          "no_non_design_assignees": {
+          "success": {
             "type": "boolean",
-            "description": "no_non_design_assignees field"
+            "description": "Indicates successful execution",
+            "example": true
           },
-          "=supabase_node": {
+          "message": {
             "type": "string",
-            "description": "=supabase_node field"
+            "description": "Success message",
+            "example": "Workflow executed successfully"
+          },
+          "data": {
+            "type": "object",
+            "description": "Response data",
+            "additionalProperties": true
           }
         },
         "required": [
-          "no_non_design_assignees",
-          "=supabase_node"
+          "success",
+          "message"
         ]
       },
       "Error": {
@@ -509,11 +431,13 @@
           "error": {
             "type": "integer",
             "format": "int32",
-            "description": "Error code"
+            "description": "Error code",
+            "example": 400
           },
           "message": {
             "type": "string",
-            "description": "Error message"
+            "description": "Error message",
+            "example": "Invalid request parameters"
           }
         }
       }
@@ -529,15 +453,15 @@
   "tags": [
     {
       "name": "AA Trigger V2",
-      "description": "AA Trigger V2 workflow operations"
+      "description": "AA Trigger V2 workflow operations on SISX server"
     },
     {
       "name": "SQDFiles General Submissions",
-      "description": "SQDFiles General Submissions workflow operations"
+      "description": "SQDFiles General Submissions workflow operations on SIS2 server"
     },
     {
       "name": "Strategy Markups",
-      "description": "Strategy Markups workflow operations"
+      "description": "Strategy Markups workflow operations on SIS1 server"
     }
   ]
 }
