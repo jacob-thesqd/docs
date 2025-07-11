@@ -1,0 +1,22 @@
+---
+title: "Execute AA Trigger V2 Retry"
+api: "POST /aa-trigger-retry"
+---
+
+Triggers the AA Trigger V2 workflow via webhook with retry functionality. This endpoint accepts workflow input data and executes the associated business logic with enhanced retry capabilities.
+
+## Request Body
+
+The request body should contain the submission date and the number of business days to add for calculation.
+
+## Authentication
+
+This endpoint requires Bearer token authentication. Include your API token in the Authorization header:
+
+```
+Authorization: Bearer YOUR_API_TOKEN
+```
+
+## Response
+
+The endpoint returns a JSON response indicating the success or failure of the workflow execution.
