@@ -1,6 +1,6 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "willow",
+  "theme": "aspen",
   "name": "Church Media Squad API Documentation",
   "colors": {
     "primary": "#513DE5",
