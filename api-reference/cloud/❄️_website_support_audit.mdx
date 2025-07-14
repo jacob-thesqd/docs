@@ -1,0 +1,166 @@
+---
+title: '❄️ Website Support Audit'
+description: 'This n8n workflow is designed to manage website support options, retrieve website information, and send out One-Time Passwords (OTPs) for authentication. It interacts with Airtable for data storage and retrieval, and uses webhooks to trigger specific actions.'
+api: "POST /wsa-get-websites, POST /wsa-get-support-options, POST /wsa-update-website-support-options, POST /wsa-send-otp"
+---
+
+## Workflow Details
+
+- **Workflow ID**: `eewvlurllY1aKdn7`
+- **Server**: Not explicitly mentioned, but webhook endpoints suggest a server like `prf.thesqd.com`.
+- **Status**: Active
+- **Created**: June 10, 2025
+- **Last Updated**: June 25, 2025
+
+## Webhook Endpoints
+
+- `POST /wsa-get-websites`
+- `POST /wsa-get-support-options`
+- `POST /wsa-update-website-support-options`
+- `POST /wsa-send-otp`
+
+## Workflow Process
+
+### 1. Get Websites
+- **Type**: Webhook Trigger
+- **Path**: `/wsa-get-websites`
+- **Method**: Not specified (defaults to POST if not stated)
+- **Response Mode**: `responseNode`
+- **Purpose**: This webhook is triggered to retrieve a list of websites. It then passes the data to the "Websites" Airtable node.
+
+### 2. Websites
+- **Type**: Airtable
+- **Operation**: `search`
+- **Base**: Strategy (`appjHSW7sGtitxoHf`)
+- **Table**: 🧩 Websites (`tblkCFFIUhSA36DK7`)
+- **Authentication**: Airtable OAuth2 API
+- **Credentials**: Acee's Connection (`jBHiG9dORxXca5We`)
+- **Purpose**: Retrieves website data from the specified Airtable base and table. The results are then passed to the "Respond to Webhook" node.
+
+### 3. Get Support Options
+- **Type**: Webhook Trigger
+- **Path**: `/wsa-get-support-options`
+- **Method**: Not specified (defaults to POST if not stated)
+- **Response Mode**: `responseNode`
+- **Purpose**: This webhook is triggered to retrieve support options. It passes the data to the "Support Options" Airtable node.
+
+### 4. Support Options
+- **Type**: Airtable
+- **Operation**: `search`
+- **Base**: Strategy (`appjHSW7sGtitxoHf`)
+- **Table**: 🔑 Website Support Options (`tbliWJ8vTvhM0TUVv`)
+- **Authentication**: Airtable OAuth2 API
+- **Credentials**: Acee's Connection (`jBHiG9dORxXca5We`)
+- **Purpose**: Fetches website support options from Airtable. The results are then sent back to the caller via the "Respond to Webhook" node.
+
+### 5. Update Account Support Options
+- **Type**: Webhook Trigger
+- **Path**: `/wsa-update-website-support-options`
+- **Method**: `POST`
+- **Response Mode**: `responseNode`
+- **Purpose**: This webhook is used to update the support options for a specific website. It receives `websiteRecordId` and `supportOptionIds` in the JSON body and passes this data to the "Update Websites" Airtable node.
+
+### 6. Update Websites
+- **Type**: Airtable
+- **Operation**: `update`
+- **Base**: Strategy (`appjHSW7sGtitxoHf`)
+- **Table**: 🧩 Websites (`tblkCFFIUhSA36DK7`)
+- **Authentication**: Airtable OAuth2 API
+- **Credentials**: Acee's Connection (`jBHiG9dORxXca5We`)
+- **Purpose**: Updates records in the "🧩 Websites" table in Airtable. It uses the `id` field for matching and updates the "Website Support Options" field with the provided `supportOptionIds`. The results are then sent back to the caller via the "Respond to Webhook" node.
+
+### 7. Send OTP
+- **Type**: Webhook Trigger
+- **Path**: `/wsa-send-otp`
+- **Method**: `POST`
+- **Response Mode**: `responseNode`
+- **Purpose**: This webhook initiates the process of sending a One-Time Password (OTP). It expects an email in the JSON body and passes this to the "Code" node.
+
+### 8. Code
+- **Type**: Code
+- **Purpose**: Generates a 6-digit OTP and pairs it with the email received from the "Send OTP" webhook. The output is then passed to the "Postgres" and "Slack" nodes.
+- **JavaScript Code**:
+```javascript
+const otp = Math.floor(100000 + Math.random() * 900000).toString(); return [{ json: { email: $json.email, otp } }];
+```
+
+### 9. Postgres
+- **Type**: Postgres
+- **Operation**: `select`
+- **Table**: `employees`
+- **Schema**: `public`
+- **Where**: Filters records where the `email` column matches the email from the "Code" node (`={{ $('Send OTP').first().json.body.email }}`).
+- **Credentials**: Squad Data (`ckrZxGCgviCXh9wc`)
+- **Purpose**: Selects employee data from the Postgres database based on the provided email. The results are then passed to the "Slack" node.
+
+### 10. Slack
+- **Type**: Slack
+- **Purpose**: Sends a direct message to a specified user via Slack. The message includes the generated OTP and the user's Slack ID.
+- **Message Text**: `=Your OTP for the Website Support Dashboard is *{{ $('Code').first().json.otp }}*.`
+- **User**: Selected by User ID, referencing `$json.slack_id`.
+- **Credentials**: n8n (Bot) (`ZSsgkHzZgg4NNTmc`)
+- **Mode**: `user`
+- **Other Options**: `mrkdwn: true`, `botProfile` with `icon_emoji: :globe_with_meridians:`, `sendAsUser: OTP`.
+
+### 11. Respond to Webhook
+- **Type**: Respond to Webhook
+- **Purpose**: This node is used by multiple webhook triggers to send a response back to the caller. It is configured to respond with `allIncomingItems`.
+
+## Data Flow
+
+The workflow has several parallel branches triggered by different webhooks:
+
+1.  **Get Websites**: `Get Websites` (Webhook) -> `Websites` (Airtable) -> `Respond to Webhook`.
+2.  **Get Support Options**: `Get Support Options` (Webhook) -> `Support Options` (Airtable) -> `Respond to Webhook`.
+3.  **Update Account Support Options**: `Update Account Support Options` (Webhook) -> `Update Websites` (Airtable) -> `Respond to Webhook`.
+4.  **Send OTP**: `Send OTP` (Webhook) -> `Code` (Code) -> `Postgres` (Postgres) -> `Slack` (Slack) and `Respond to Webhook` (implicitly via connections from "Code").
+
+## Authentication
+
+### Airtable
+- **Type**: Airtable OAuth2 API
+- **Credentials**: Acee's Connection (`jBHiG9dORxXca5We`)
+
+### Postgres
+- **Type**: Postgres
+- **Credentials**: Squad Data (`ckrZxGCgviCXh9wc`)
+
+### Slack
+- **Type**: Slack API
+- **Credentials**: n8n (Bot) (`ZSsgkHzZgg4NNTmc`)
+
+## Usage Examples
+
+### To get websites:
+Send a request to `https://prf.thesqd.com/webhook/website-support-audit` (or the specific `wsa-get-websites` endpoint).
+
+### To get support options:
+Send a request to `https://prf.thesqd.com/webhook/wsa-get-support-options`.
+
+### To update website support options:
+Send a `POST` request to `https://prf.thesqd.com/webhook/wsa-update-website-support-options` with a JSON body containing:
+```json
+{
+  "websiteRecordId": "recZZtZzjeqWy4NMe",
+  "supportOptionIds": [
+    "rec3tEFT6TY9RwThA",
+    "rec9RZWLk9Sxxxgbp",
+    "recQh0wxstnP2SFP0",
+    "recSuhnFkn9L7U0Dc",
+    "recUTG6GZgDJd54oN",
+    "reci28WRuP97TeF50",
+    "recpfYRiTQlkv9iYg",
+    "recqDdlg8oF7cERMm",
+    "recx8aeTjx80zNpcJ"
+  ]
+}
+```
+
+### To send an OTP:
+Send a `POST` request to `https://prf.thesqd.com/webhook/wsa-send-otp` with a JSON body containing:
+```json
+{
+  "email": "acee@churchmediasquad.com"
+}
+```
+This will trigger the generation of an OTP, retrieval of employee data, and sending of the OTP to the specified email address via Slack.
