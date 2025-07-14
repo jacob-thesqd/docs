@@ -1,1 +1,120 @@
-{"$schema":"https://mintlify.com/docs.json","theme":"aspen","name":"TheSquad API Docs","colors":{"primary":"#513DE5","light":"#341756","dark":"#F9635D"},"favicon":"/favicon.svg","openapi":["api-reference/sis1/openapi.json","api-reference/sis2/openapi.json","api-reference/sisx/openapi.json","api-reference/cloud/openapi.json","api-reference/supabase/openapi.json","api-reference/windmill/openapi.json"],"navigation":{"tabs":[{"tab":"Docs","groups":[{"group":"SIS1","pages":[]},{"group":"SIS2","pages":[]},{"group":"SISX","pages":[]},{"group":"CLOUD","pages":[]},{"group":"SUPABASE","pages":[]},{"group":"WINDMILL","pages":[]}]},{"tab":"API Reference","groups":[{"group":"Get Started","pages":["api-reference/introduction"]},{"group":"SIS1","pages":["api-reference/sis1/strategy-markups"]},{"group":"SIS2","pages":["api-reference/sis2/sqd-files-general-submissions"]},{"group":"SISX","pages":["api-reference/sisx/aa-trigger","api-reference/sisx/aa-trigger-retry","api-reference/sisx/time_estimate_processor_v5","api-reference/sisx/aa_trigger_v2","api-reference/sisx/designer_availability_api_v5.2","api-reference/sisx/update_sis_workflows"]},{"group":"CLOUD","pages":["api-reference/cloud/❄️_airtable_search_checker","api-reference/cloud/❄️_clickup_list_checker","api-reference/cloud/❄️_website_support_audit","api-reference/cloud/4️⃣_sms_-_task_handler"]},{"group":"SUPABASE","pages":[]},{"group":"Windmill","pages":[]}]}],"global":{}},"logo":{"light":"/logo/light.svg","dark":"/logo/dark.svg"},"navbar":{"links":[{"label":"Support","href":"mailto:hi@mintlify.com"}],"primary":{"type":"button","label":"Dashboard","href":"https://dashboard.mintlify.com"}},"footer":{}}
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "aspen",
+  "name": "TheSquad API Docs",
+  "colors": {
+    "primary": "#513DE5",
+    "light": "#341756",
+    "dark": "#F9635D"
+  },
+  "favicon": "/favicon.svg",
+  "openapi": [
+    "api-reference/sis1/openapi.json",
+    "api-reference/sis2/openapi.json",
+    "api-reference/sisx/openapi.json",
+    "api-reference/cloud/openapi.json",
+    "api-reference/supabase/openapi.json",
+    "api-reference/windmill/openapi.json"
+  ],
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Docs",
+        "groups": [
+          {
+            "group": "SIS1",
+            "pages": []
+          },
+          {
+            "group": "SIS2",
+            "pages": []
+          },
+          {
+            "group": "SISX",
+            "pages": []
+          },
+          {
+            "group": "CLOUD",
+            "pages": []
+          },
+          {
+            "group": "SUPABASE",
+            "pages": []
+          },
+          {
+            "group": "WINDMILL",
+            "pages": []
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "api-reference/introduction"
+            ]
+          },
+          {
+            "group": "SIS1",
+            "pages": [
+              "api-reference/sis1/strategy-markups"
+            ]
+          },
+          {
+            "group": "SIS2",
+            "pages": [
+              "api-reference/sis2/sqd-files-general-submissions"
+            ]
+          },
+          {
+            "group": "SISX",
+            "pages": [
+              "api-reference/sisx/time_estimate_processor_v5",
+              "api-reference/sisx/aa_trigger_v2",
+              "api-reference/sisx/designer_availability_api_v5.2",
+              "api-reference/sisx/update_sis_workflows"
+            ]
+          },
+          {
+            "group": "CLOUD",
+            "pages": [
+              "api-reference/cloud/❄️_airtable_search_checker",
+              "api-reference/cloud/❄️_clickup_list_checker",
+              "api-reference/cloud/❄️_website_support_audit",
+              "api-reference/cloud/4️⃣_sms_-_task_handler"
+            ]
+          },
+          {
+            "group": "SUPABASE",
+            "pages": []
+          },
+          {
+            "group": "Windmill",
+            "pages": []
+          }
+        ]
+      }
+    ],
+    "global": {}
+  },
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Support",
+        "href": "mailto:hi@mintlify.com"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Dashboard",
+      "href": "https://dashboard.mintlify.com"
+    }
+  },
+  "footer": {}
+}

@@ -1,7 +1,7 @@
 ---
 title: 'Update Sis_Workflows'
 description: 'This N8N workflow synchronizes n8n workflow data with a PostgreSQL database. It is triggered by a webhook when a new workflow is created and also has a scheduled trigger for periodic updates and deletions. The workflow fetches workflow details, maps them to database columns, and upserts or deletes records in the `sis_workflows` table.'
-api: "POST /sis-sync-wf-new-record, POST /sis-sync-wf-delete, POST /sis-sync-wf-cursor"
+api: "POST /sis-sync-wf-new-record"
 ---
 
 ## Workflow Details
