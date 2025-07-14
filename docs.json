@@ -73,8 +73,7 @@
             "pages": [
               "api-reference/sisx/time_estimate_processor_v5",
               "api-reference/sisx/aa_trigger_v2",
-              "api-reference/sisx/designer_availability_api_v5.2",
-              "api-reference/sisx/update_sis_workflows"
+              "api-reference/sisx/designer_availability_api_v5.2"
             ]
           },
           {
@@ -82,7 +81,6 @@
             "pages": [
               "api-reference/cloud/❄️_airtable_search_checker",
               "api-reference/cloud/❄️_clickup_list_checker",
-              "api-reference/cloud/❄️_website_support_audit",
               "api-reference/cloud/4️⃣_sms_-_task_handler"
             ]
           },
