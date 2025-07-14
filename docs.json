@@ -8,7 +8,14 @@
     "dark": "#F9635D"
   },
   "favicon": "/favicon.svg",
-  "openapi": "api-reference/openapi.json",
+  "openapi": [
+    "api-reference/sis1/openapi.json",
+    "api-reference/sis2/openapi.json",
+    "api-reference/sisx/openapi.json",
+    "api-reference/cloud/openapi.json",
+    "api-reference/supabase/openapi.json",
+    "api-reference/windmill/openapi.json"
+  ],
   "navigation": {
     "tabs": [
       {
@@ -16,33 +23,27 @@
         "groups": [
           {
             "group": "SIS1",
-            "pages": [
-            ]
+            "pages": []
           },
           {
             "group": "SIS2",
-            "pages": [
-            ]
+            "pages": []
           },
-                    {
+          {
             "group": "SISX",
-            "pages": [
-            ]
+            "pages": []
           },
-                    {
+          {
             "group": "CLOUD",
-            "pages": [
-            ]
+            "pages": []
           },
           {
             "group": "SUPABASE",
-            "pages": [
-            ]
+            "pages": []
           },
           {
             "group": "WINDMILL",
-            "pages": [
-            ]
+            "pages": []
           }
         ]
       },
@@ -61,38 +62,35 @@
               "api-reference/sis1/strategy-markups"
             ]
           },
-                    {
+          {
             "group": "SIS2",
             "pages": [
               "api-reference/sis2/sqd-files-general-submissions"
             ]
           },
-                    {
+          {
             "group": "SISX",
             "pages": [
               "api-reference/sisx/aa-trigger",
               "api-reference/sisx/aa-trigger-retry"
             ]
           },
-                    {
+          {
             "group": "CLOUD",
-            "pages": [
-            ]
+            "pages": []
           },
-                    {
+          {
             "group": "SUPABASE",
-            "pages": [
-            ]
+            "pages": []
           },
           {
             "group": "Windmill",
-            "pages": [
-            ]
+            "pages": []
           }
         ]
       }
     ],
-    "global": {
+    "global": {}
   },
   "logo": {
     "light": "/logo/light.svg",
@@ -111,6 +109,5 @@
       "href": "https://dashboard.mintlify.com"
     }
   },
-  "footer": {
-  }
-}}
+  "footer": {}
+}

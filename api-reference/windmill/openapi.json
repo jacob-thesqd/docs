@@ -1,0 +1,16 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Windmill API",
+    "description": "API specification for Windmill workflows",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://windmill.thesqd.com",
+      "description": "Windmill Server"
+    }
+  ],
+  "paths": {},
+  "components": {}
+}

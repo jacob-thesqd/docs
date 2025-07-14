@@ -1,0 +1,16 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Supabase API",
+    "description": "API specification for Supabase services",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://supabase.thesqd.com",
+      "description": "Supabase Server"
+    }
+  ],
+  "paths": {},
+  "components": {}
+}

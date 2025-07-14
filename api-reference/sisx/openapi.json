@@ -1,0 +1,211 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "SISX Server API",
+    "description": "API specification for SISX server workflows including AA Trigger V2",
+    "version": "1.0.0",
+    "license": {
+      "name": "MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://sisx.thesqd.com",
+      "description": "SISX Production Server"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/aa-trigger": {
+      "post": {
+        "summary": "Execute AA Trigger V2 workflow",
+        "description": "Triggers the AA Trigger V2 workflow via webhook",
+        "operationId": "execute_aa_trigger",
+        "requestBody": {
+          "description": "Workflow input data",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AATriggerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful workflow execution",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "AA Trigger V2"
+        ]
+      }
+    },
+    "/aa-trigger-retry": {
+      "post": {
+        "summary": "Execute AA Trigger V2 workflow with retry",
+        "description": "Triggers the AA Trigger V2 workflow via webhook with retry capability",
+        "operationId": "execute_aa_trigger_retry",
+        "requestBody": {
+          "description": "Workflow input data",
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AATriggerRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful workflow execution",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal server error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "AA Trigger V2"
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AATriggerRequest": {
+        "type": "object",
+        "properties": {
+          "submission_date": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The submission date for calculation",
+            "example": "2025-07-11T10:00:00Z"
+          },
+          "days out": {
+            "type": "string",
+            "description": "Number of business days to add",
+            "example": "5"
+          }
+        },
+        "required": [
+          "submission_date",
+          "days out"
+        ]
+      },
+      "SuccessResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "Indicates successful execution",
+            "example": true
+          },
+          "message": {
+            "type": "string",
+            "description": "Success message",
+            "example": "Workflow executed successfully"
+          },
+          "data": {
+            "type": "object",
+            "description": "Response data",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "success",
+          "message"
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "required": [
+          "error",
+          "message"
+        ],
+        "properties": {
+          "error": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Error code",
+            "example": 400
+          },
+          "message": {
+            "type": "string",
+            "description": "Error message",
+            "example": "Invalid request parameters"
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Bearer token for authentication"
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "AA Trigger V2",
+      "description": "AA Trigger V2 workflow operations"
+    }
+  ]
+}
