@@ -1,0 +1,66 @@
+---
+title: 'ClickUp List Checker'
+description: 'This workflow checks for active ClickUp lists in the database based on member ID and list type received via a webhook. It then responds with the relevant ClickUp space, folder, and list IDs, or returns an error if no matching list is found.'
+api: "POST /clickup-list-checker"
+---
+
+## Workflow Details
+
+- **Workflow ID**: `T0VzydHfUqWnds7O`
+- **Status**: Active
+- **Created**: June 19, 2025
+- **Last Updated**: July 2, 2025
+
+## Webhook Endpoint
+
+```
+POST https://churchmediasquad.app.n8n.cloud/webhook/clickup-list-checker
+```
+
+## Workflow Process
+
+### 1. Webhook
+- **Purpose**: This is the trigger node for the workflow. It listens for incoming HTTP POST requests on the `/clickup-list-checker` path.
+- **HTTP Method**: POST
+- **Response Mode**: Responds via a specific node (`Respond to Webhook`).
+- **Sticky Note**: There's a critical sticky note associated with this webhook: "### DO NOT TOUCH! **Changing the webhook will change it in A LOT of workflows.**" This emphasizes the importance of not altering this webhook's configuration.
+
+### 2. prf_ministry_dept
+- **Type**: PostgreSQL Node
+- **Operation**: Select
+- **Purpose**: This node queries the `prf_general_submissions` table in the PostgreSQL database to retrieve the `raw_data` column. It filters the records based on the `submission_id` received from the webhook's JSON body (`{{ $json.body.giid }}`).
+
+### 3. ClickUp List
+- **Type**: PostgreSQL Node
+- **Operation**: Select
+- **Purpose**: This node queries the `clickup_lists` table in the PostgreSQL database. It searches for an active list (`active` column set to `true`) that matches the `memberid` (`account` column) and `list_type` (`list_type` column) provided in the webhook's JSON body. It also sorts by name in descending order and limits the result to 1.
+
+### 4. If
+- **Type**: If Node
+- **Purpose**: This node checks if a `list_id` was found in the preceding `ClickUp List` node. It specifically checks if the `id` field from the output of the `ClickUp List` node exists.
+
+### 5. Respond to Webhook
+- **Type**: Respond to Webhook Node
+- **Purpose**: If the `If` node determines that a `list_id` was found (meaning a matching ClickUp list exists), this node is executed. It responds to the webhook with a JSON object containing the `spaceid`, `folderid`, and `listid`. The `listid` is either taken from an override in the `raw_data` of the `prf_general_submissions` table or from the `id` of the `ClickUp List` node's output.
+
+### 6. Error
+- **Type**: Respond to Webhook Node
+- **Purpose**: If the `If` node determines that no matching ClickUp list was found (the `id` field from the `ClickUp List` node does not exist), this node is executed. It responds to the webhook with a 400 Bad Request status code and no data, indicating an error.
+
+## Data Flow
+
+```
+Webhook -> prf_ministry_dept -> ClickUp List -> If -> (Respond to Webhook OR Error)
+```
+
+## Authentication
+
+### PostgreSQL
+- **Credential ID**: `ckrZxGCgviCXh9wc`
+- **Name**: `Squad Data`
+
+## Error Handling
+
+- **Error Workflow**: `6hQvch97iNP5ny1i`
+- **Execution Order**: `v1`
+- **Continue on Error**: Not explicitly configured for specific nodes, but the workflow structure handles the "not found" case via the `If` node.
