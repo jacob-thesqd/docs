@@ -1,0 +1,597 @@
+---
+title: '4️⃣ SMS - Task Handler'
+description: 'This n8n workflow automates the creation and management of tasks and subtasks in ClickUp based on submissions from Fillout. It handles various project types, including sermon series, coaching calls, events, and holidays, by fetching data from Airtable and Postgres, processing it, and creating corresponding records in ClickUp.'
+api: "POST /prf4-sms-task-handler"
+---
+
+## Workflow Details
+
+- **Workflow ID**: xh35rAFAmZlz7cXU
+- **Name**: 4️⃣ SMS - Task Handler
+- **Status**: Active
+
+## Webhook Endpoint
+
+```
+POST https://churchmediasquad.app.n8n.cloud/webhook/prf4-sms-task-handler
+```
+
+## Workflow Process
+
+### 1. Webhook
+- **Path**: `prf4-sms-task-handler`
+- **Method**: POST
+- **Purpose**: This is the trigger node for the workflow, receiving data from Fillout submissions.
+
+### 2. HTTP Request
+- **URL**: `https://prf.thesqd.com/webhook/sms-project-handler`
+- **Method**: POST
+- **Body Parameters**:
+    - `formid`: `{{ $json.body.formid }}`
+    - `submissionid`: `{{ $json.body.submissionid }}`
+- **Purpose**: Forwards the received webhook data to another handler.
+
+### 3. Detail Submission
+- **Node Type**: HTTP Request
+- **URL**: `https://api.fillout.com/v1/api/forms/{{ $json.body.formid || $json.body.formId }}/submissions/{{ $json.body.submissionid || $json.body.submission.submissionId }}`
+- **Authentication**: HTTP Header Auth (Fillout credential)
+- **Purpose**: Fetches detailed submission data from Fillout based on the incoming webhook information.
+
+### 4. Execution Data
+- **Purpose**: Saves specific data from the webhook execution, such as `formid` and `submissionid`, for potential later use.
+
+### 5. Brain Account
+- **Node Type**: Airtable
+- **Base**: Mmmm Brains (The Master Brain)
+- **Table**: Accounts
+- **Operation**: Search
+- **Formula**: `={Member #} = '{{ $('Detail Submission').first().json.submission.urlParameters.find(q => q.id == 'memberid').value }}'`
+- **Purpose**: Retrieves account information from Airtable based on a member ID found in the submission's URL parameters.
+
+### 6. Coach
+- **Node Type**: Airtable
+- **Base**: Communications Squad
+- **Table**: Client Info
+- **Operation**: Search
+- **Formula**: `={Member #} = '{{ $('Brain Account').first().json['Member #'] }}'`
+- **Purpose**: Fetches client-specific information, including ClickUp User ID, from Airtable using the member ID obtained from the Brain Account.
+
+### 7. Guest
+- **Node Type**: Airtable
+- **Base**: Mmmm Brains (The Master Brain)
+- **Table**: Guests
+- **Operation**: Search
+- **Fields**: `Clickup User ID`
+- **Formula**: `=AND({Email} = '{{ $('Detail Submission').first().json.submission.urlParameters.find(q => q.id == 'email').value }}', FIND('{{ $('Brain Account').first().json['id'] }}', ARRAYJOIN({Account Record ID})))`
+- **Purpose**: Finds the guest user's ClickUp User ID based on their email and associated account record ID.
+
+### 8. Default Fields
+- **Node Type**: Set
+- **Assignments**:
+    - `Member #`: `={{ $('Brain Account').first().json['Member #'] }}`
+    - `ClickUp Space ID`: `={{ $('Brain Account').first().json['ClickUp Space ID'][0] }}`
+    - `ClickUp Folder ID`: `={{ $('Brain Account').first().json['ClickUp Folder ID'] }}`
+    - `ClickUp List ID`: `={{ $('Brain Account').first().json['ClickUp List ID'] }}`
+    - `Assigned Coach ID`: `={{ $('Coach').first().json['Clickup User ID (from Comms Rep)'][0] }}`
+    - `submission_id`: `={{ $('Webhook').first().json.body.formid == 'hbd1fTXmnFus' ? $('Detail Submission').first().json.submission.submissionId + "-smsermonseries" : $('Detail Submission').first().json.submission.submissionId }}`
+    - `ptid`: `={{ $('Webhook').first().json.body.formid == 'hbd1fTXmnFus' ? 'rec4PaF9EeX1J7Hu2' : $('Detail Submission').item.json.submission.urlParameters.find(q => q.id == 'ptid').value }}`
+- **Purpose**: Gathers and sets default fields required for subsequent operations, including account details, user IDs, and submission identifiers.
+
+### 9. Project Type
+- **Node Type**: Airtable
+- **Base**: Project Requests
+- **Table**: Project Types
+- **Operation**: Get Record by ID
+- **Record ID**: `={{ $('Default Fields').first().json.ptid }}`
+- **Purpose**: Fetches the details of the selected project type from Airtable.
+
+### 10. ClickUp List
+- **Node Type**: Postgres
+- **Table**: `clickup_lists`
+- **Operation**: Select
+- **Where**:
+    - `account`: `={{ $('Detail Submission').first().json.submission.urlParameters.find(q => q.id == 'memberid').value }}`
+    - `list_type`: `={{ $('Project Type').first().json['List Type'] }}`
+    - `active`: `true`
+- **Purpose**: Retrieves the appropriate ClickUp list ID based on the account and the type of project.
+
+### 11. General Info
+- **Node Type**: Airtable
+- **Base**: Project Requests
+- **Table**: General Information
+- **Operation**: Search
+- **Formula**: `={Submission ID} = '{{ $('Detail Submission').first().json.submission.urlParameters.find(q => q.name == 'giid').value }}'`
+- **Purpose**: Fetches general information related to the submission, likely from a different form or process.
+
+### 12. Project Selection
+- **Node Type**: Airtable
+- **Base**: Project Requests
+- **Table**: Project Selection
+- **Operation**: Get Record by ID
+- **Record ID**: `={{ $json['Project Selection'] }}`
+- **Purpose**: Retrieves information about the selected project from Airtable.
+
+### 13. Switch
+- **Node Type**: Switch
+- **Rules**: Based on the `formid` from the webhook, it routes the data to different project types:
+    - `Sermon Series`: `hbd1fTXmnFus`
+    - `Coaching Call`: `7kmZ3uFFuous`
+    - `Event`: `oML2k1yxVbus`
+    - `Holiday`: `nt6n9LpmYrus`
+    - `GSMP`: `1VS5PGg8skus`
+    - `Sermon Recap`: `v4sJ2Zokf4us`
+- **Purpose**: Directs the workflow execution based on the type of submission received.
+
+### 14. Update PS (Project Selection)
+- **Node Type**: Airtable
+- **Base**: Project Requests
+- **Table**: Project Selection
+- **Operation**: Update
+- **Columns**:
+    - `id`: `={{ $('Project Selection').first().json.id }}`
+    - `Project Type`: `={{ $('Project Selection').first().json['Project Type'].append('rec4PaF9EeX1J7Hu2') }}`
+- **Purpose**: Updates the Project Selection record in Airtable, likely by appending a project type.
+
+### 15. Sermon Series
+- **Node Type**: Set
+- **Assignments**: Sets fields for a "Sermon Series" project type, including `task title`, `tag`, `status`, `assignee id`, `due date`, and `subtask condition`.
+- **Purpose**: Prepares specific fields for creating a Sermon Series task in ClickUp.
+
+### 16. Coaching Call Fields
+- **Node Type**: Set
+- **Assignments**: Sets fields for a "Coaching Call" project type, including `task title`, `tag`, `status`, `time estimate`, `assignee id`, `due date`, and `pd-maindesignurl`.
+- **Purpose**: Prepares specific fields for creating a Coaching Call task in ClickUp.
+
+### 17. Event Task Fields
+- **Node Type**: Set
+- **Assignments**: Sets fields for an "Event" project type, including `task title`, `tag`, `status`, `time estimate`, `assignee id`, `due date`, and `subtask condition`.
+- **Purpose**: Prepares specific fields for creating an Event task in ClickUp.
+
+### 18. Holiday Fields
+- **Node Type**: Set
+- **Assignments**: Sets fields for a "Holiday" project type, including `task title`, `tag`, `status`, `time estimate`, `assignee id`, `due date`, and `subtask condition`.
+- **Purpose**: Prepares specific fields for creating a Holiday-related task in ClickUp.
+
+### 19. GSMP (General Social Media Plan)
+- **Node Type**: Set
+- **Assignments**: Sets fields for a "General Social Media Plan" project type, including `task title`, `tag`, `status`, `assignee id`, `due date`, `pd-maindesignurl`, `subtask condition`, and Slack channel/project type information.
+- **Purpose**: Prepares specific fields for creating a General Social Media Plan task in ClickUp.
+
+### 20. SR Due Date
+- **Node Type**: Code
+- **JS Code**: Calculates a due date based on the submission time, considering the day of the week and time of day for a "Sermon Recap" project.
+- **Purpose**: Determines the appropriate due date for Sermon Recap tasks.
+
+### 21. Sermon Recap Fields
+- **Node Type**: Set
+- **Assignments**: Sets fields for a "Sermon Recap" project type, including `task title`, `tag`, `status`, `time estimate`, `assignee id`, `due date`, `pd-maindesignurl`, `subtask condition`, and Slack channel/project type information.
+- **Purpose**: Prepares specific fields for creating a Sermon Recap task in ClickUp.
+
+### 22. Aggregate
+- **Node Type**: Aggregate
+- **Purpose**: Aggregates data from the Postgres node, likely to prepare it for the `rawContent` node.
+
+### 23. Postgres
+- **Node Type**: Postgres
+- **Operation**: Execute Query
+- **Query**: `SELECT variable, temp_text, fillout_field FROM public.prf_content_variables;`
+- **Purpose**: Retrieves content variables from a PostgreSQL database.
+
+### 24. rawContent
+- **Node Type**: Code
+- **JS Code**: Processes raw content by replacing variables with corresponding text based on Fillout submission data, utilizing data from the `Aggregate` node.
+- **Purpose**: Dynamically constructs content for tasks based on predefined variables and submission details.
+
+### 25. Fix Content
+- **Node Type**: Code
+- **JS Code**: Cleans and formats the content, specifically handling deliverables by creating separate lines for each item and replacing placeholder text.
+- **Purpose**: Prepares the main task description content.
+
+### 26. Create Main Task
+- **Node Type**: ClickUp
+- **Operation**: Create Task
+- **List**: Dynamically determined based on whether `listid` is available from `Filter` or defaults to `ClickUp List`
+- **Name**: `={{ $('Filter').first().json['task title'] }}`
+- **Space**: `={{ $('ClickUp List').first().json.space }}`
+- **Folder**: `={{ $('ClickUp List').first().json.folder }}`
+- **Additional Fields**: Includes tags, status, content, due date, assignee IDs, and time estimate.
+- **Purpose**: Creates the main task in ClickUp.
+
+### 27. Set Department
+- **Node Type**: ClickUp
+- **Operation**: Set Custom Field
+- **Task**: `={{ $json.id }}`
+- **Field**: `423fe36b-7833-4b75-8685-51143b675dbe` (Likely a custom field for Department)
+- **Value**: `={{ ["c2d8a589-ef2d-4bfe-a944-90440ab00f2e"] }}` (Likely a specific department ID)
+- **Purpose**: Sets a custom field (Department) on the newly created ClickUp task.
+
+### 28. Main Task Content
+- **Node Type**: HTTP Request
+- **URL**: `https://sis1.thesqd.com/webhook/desc-updated-new`
+- **Method**: POST
+- **JSON Body**: Sends the processed `content` from `Fix Content` and the `task_id` of the newly created main task.
+- **Purpose**: Updates the description of the main ClickUp task with the dynamically generated content.
+
+### 29. Needs Notif
+- **Node Type**: Filter
+- **Conditions**: Checks if the `slack channel id` exists and equals `iYpmiDAB2zus`.
+- **Purpose**: Determines if a notification should be sent for specific needs.
+
+### 30. Slack Notif
+- **Node Type**: Slack
+- **Text**: Formats a Slack message with details about the new submission, including account information, the assigned coach, and a link to the ClickUp project.
+- **Channel ID**: `={{ $('Filter').first().json['slack channel id'] }}`
+- **Purpose**: Sends a notification to Slack about a new project request.
+
+### 31. Check SRP Video
+- **Node Type**: Filter
+- **Conditions**: Checks if the `Create SRP Video` node was executed.
+- **Purpose**: Conditional check for proceeding with SRP video creation.
+
+### 32. PR Subtask
+- **Node Type**: Airtable
+- **Base**: Project Requests
+- **Table**: SMS Subtasks
+- **Operation**: Search
+- **Filter By Formula**: `={{ $('Filter').first().json['subtask condition'] }}`
+- **Purpose**: Searches for a specific subtask in Airtable based on a condition.
+
+### 33. Check Deliverables
+- **Node Type**: Filter
+- **Conditions**: Checks if the deliverables from `Filter` contain certain values or if the deliverables field from `PR Subtask` is empty.
+- **Purpose**: Filters subtasks based on deliverable criteria.
+
+### 34. Fix Subtask Details
+- **Node Type**: Code
+- **Mode**: Run Once For Each Item
+- **JS Code**: Dynamically constructs the title, due date, and content for subtasks based on the project type and data from other nodes.
+- **Purpose**: Prepares the details for creating subtasks.
+
+### 35. Create Subtask
+- **Node Type**: ClickUp
+- **Operation**: Create Task
+- **List**: Dynamically determined.
+- **Name**: `={{ $('Fix Subtask Details').item.json.title }}`
+- **Parent Task ID**: `={{ $('Create Main Task').first().json.id }}`
+- **Additional Fields**: Includes tags, status, due date, assignee IDs, and time estimate.
+- **Purpose**: Creates a subtask under the main ClickUp task.
+
+### 36. Subtask Content
+- **Node Type**: HTTP Request
+- **URL**: `https://sis1.thesqd.com/webhook/desc-updated-new`
+- **Method**: POST
+- **JSON Body**: Sends the subtask content and the subtask ID.
+- **Purpose**: Updates the description of the subtask in ClickUp.
+
+### 37. Set Department (Subtask)
+- **Node Type**: ClickUp
+- **Operation**: Set Custom Field
+- **Task**: `={{ $json.id }}` (referring to the subtask)
+- **Field**: `423fe36b-7833-4b75-8685-51143b675dbe`
+- **Value**: `={{ ["c2d8a589-ef2d-4bfe-a944-90440ab00f2e"] }}`
+- **Purpose**: Sets the Department custom field for the subtask.
+
+### 38. Merge
+- **Node Type**: Merge
+- **Purpose**: Merges data, likely from different branches of the workflow.
+
+### 39. Merge1
+- **Node Type**: Merge
+- **Purpose**: Merges data, likely from different branches of the workflow.
+
+### 40. Merge2
+- **Node Type**: Merge
+- **Purpose**: Merges data, likely from different branches of the workflow.
+
+### 41. Filter1
+- **Node Type**: Filter
+- **Conditions**: Checks if `PD ID` and `Subtask Content` IDs exist.
+- **Purpose**: Filters for successful subtask creation and data availability.
+
+### 42. Create SRP Video
+- **Node Type**: ClickUp
+- **Operation**: Create Task
+- **List**: `={{ $('Default Fields').first().json['ClickUp List ID'] }}`
+- **Name**: Dynamically generated for Sermon Recap Video tasks.
+- **Space**: `={{ $('Default Fields').first().json['ClickUp Space ID'] }}`
+- **Folder**: `={{ $('Default Fields').first().json['ClickUp Folder ID'] }}`
+- **Additional Fields**: Includes tags and time estimate.
+- **Purpose**: Creates a task specifically for Sermon Recap Video content.
+
+### 43. Fix SRP Video
+- **Node Type**: Code
+- **JS Code**: Cleans and formats the raw content for Sermon Recap Videos.
+- **Purpose**: Prepares the content for the SRP Video task.
+
+### 44. SRP Video Content
+- **Node Type**: HTTP Request
+- **URL**: `https://sis1.thesqd.com/webhook/desc-updated-new`
+- **Method**: POST
+- **JSON Body**: Sends the processed SRP video content and the task ID for the SRP Video task.
+- **Purpose**: Updates the description of the SRP Video task.
+
+### 45. Link SRP Video
+- **Node Type**: ClickUp
+- **Operation**: Task Dependency
+- **Task**: `={{ $('Create SRP Video').first().json.id }}`
+- **Depends On Task**: `={{ $('Create Main Task').first().json.id }}`
+- **Purpose**: Creates a dependency link in ClickUp, making the SRP Video task dependent on the main task.
+
+### 46. Upsert Submission
+- **Node Type**: Postgres
+- **Operation**: Execute Query
+- **Query**: Inserts or updates a record in the `prf_project_submissions` table in PostgreSQL, setting `editable` to false, and updating `clickup_id` and `gis_id`. The logic handles specific cases for "Sermon Series" submissions.
+- **Purpose**: Records the submission details and ClickUp task information in the PostgreSQL database.
+
+### 47. Update Content
+- **Node Type**: Postgres
+- **Operation**: Update
+- **Table**: `prf_project_submissions`
+- **Columns**:
+    - `task_content`: `={{ $('Fix Content').first().json.content }}`
+    - `project_submission_id`: `={{ $('Default Fields').first().json.submission_id }}`
+- **Purpose**: Updates the `task_content` field in the `prf_project_submissions` table with the processed content.
+
+### 48. Get PD (Project Details)
+- **Node Type**: Airtable
+- **Base**: Project Requests
+- **Table**: Project Details
+- **Operation**: Search
+- **Formula**: `={Submission ID} = '{{ $('Default Fields').first().json.submission_id }}'`
+- **Purpose**: Retrieves existing "Project Details" records from Airtable based on the submission ID.
+
+### 49. PD ID
+- **Node Type**: Set
+- **Assignments**:
+    - `pd_id`: `={{ $json.id }}`
+- **Purpose**: Extracts the ID from the "Project Details" record retrieved by `Get PD`.
+
+### 50. Create Project Details
+- **Node Type**: Airtable
+- **Base**: Project Requests
+- **Table**: Project Details
+- **Operation**: Create
+- **Columns**: Populates fields like `Account`, `Project Type`, `Submission ID`, `Submission Time`, `ClickUp Task Link`, and `General Information` using data from various previous nodes.
+- **Purpose**: Creates a new "Project Details" record in Airtable.
+
+### 51. Update PD (Project Details)
+- **Node Type**: Airtable
+- **Base**: Project Requests
+- **Table**: Project Details
+- **Operation**: Update
+- **Columns**:
+    - `id`: `={{ $('Get PD').first().json.id }}`
+    - `ClickUp Task Link`: `={{ $('Create Main Task').first().json.id }}`
+- **Purpose**: Updates an existing "Project Details" record in Airtable with the ClickUp Task ID.
+
+### 52. If
+- **Node Type**: If
+- **Conditions**: Checks if `Create Main Task` and either `Sermon Series` or `Coaching Call Fields` have been executed.
+- **Purpose**: A conditional check to potentially skip certain actions if the main task creation and a specific project type are already handled.
+
+### 53. Subtask Record
+- **Node Type**: Airtable
+- **Base**: Project Requests
+- **Table**: Project Details
+- **Operation**: Create
+- **Columns**: Creates a "Project Details" record specifically marking it as a subtask, populating fields like `Account`, `Subtask?`, `Project Type`, `Submission ID`, `Parent Project`, `Submission Time`, `ClickUp Task Link`, and `Task Content (Raw)`.
+- **Purpose**: Records subtask information in Airtable.
+
+### 54. Filter
+- **Node Type**: Filter
+- **Conditions**: Checks if `PD ID` and `Subtask Content` IDs exist.
+- **Purpose**: Filters the data to proceed only if both PD ID and Subtask Content are available.
+
+### 55. Create Subtask (PR Subtask)
+- **Node Type**: ClickUp
+- **Operation**: Create Task
+- **List**: Dynamically determined.
+- **Name**: `={{ $('Fix Subtask Details').item.json.title }}`
+- **Parent Task ID**: `={{ $('Create Main Task').first().json.id }}`
+- **Additional Fields**: Includes tags, status, due date, assignee IDs, and time estimate from `PR Subtask` and `Fix Subtask Details`.
+- **Purpose**: Creates a subtask in ClickUp.
+
+### 56. Subtask Content (for PR Subtask)
+- **Node Type**: HTTP Request
+- **URL**: `https://sis1.thesqd.com/webhook/desc-updated-new`
+- **Method**: POST
+- **JSON Body**: Sends the subtask content and the subtask ID.
+- **Purpose**: Updates the description of the subtask in ClickUp.
+
+### 57. Set Department (for PR Subtask)
+- **Node Type**: ClickUp
+- **Operation**: Set Custom Field
+- **Task**: `={{ $json.id }}` (referring to the subtask)
+- **Field**: `423fe36b-7833-4b75-8685-51143b675dbe`
+- **Value**: `={{ ["c2d8a589-ef2d-4bfe-a944-90440ab00f2e"] }}`
+- **Purpose**: Sets the Department custom field for the PR subtask.
+
+### 58. Send Beautify Comment
+- **Node Type**: HTTP Request
+- **URL**: `https://sis1.thesqd.com/webhook/clickup-comment`
+- **Method**: POST
+- **Body Parameters**:
+    - `taskId`: `={{ $('Create Main Task').item.json.id }}`
+    - `commentId`: Dynamically selected based on `Count Sermon Recap`.
+- **Purpose**: Sends a comment to ClickUp, possibly for beautification or specific tracking.
+
+### 59. Trial Notif
+- **Node Type**: Slack
+- **Text**: Formats a Slack notification specifically for trial accounts, highlighting a new sermon recap submission and providing a link to the project.
+- **Channel ID**: `C07DY5ED4G3` (sm-squad-notifications)
+- **Purpose**: Notifies the Slack channel about new submissions from trial accounts.
+
+### 60. SRP Comment
+- **Node Type**: Filter
+- **Conditions**: Checks if `Last Reel Request` has been executed and if `Count Sermon Recap` is 1 or 2, and if the `trial` parameter is 'true'.
+- **Purpose**: Conditional logic for sending specific comments or notifications related to sermon recaps.
+
+### 61. Last Reel Request
+- **Node Type**: Airtable
+- **Base**: Communications Squad
+- **Table**: Client Info
+- **Operation**: Update
+- **Columns**:
+    - `id`: `={{ $('Search Client Info').first().json.id }}`
+    - `Last Reel Request`: `={{ new Date($('Webhook').item.json.body.submission.submissionTime).toLocaleDateString('en-US') }}`
+- **Purpose**: Updates the `Last Reel Request` field in the Client Info table in Airtable with the current submission time.
+
+### 62. Search Client Info
+- **Node Type**: Airtable
+- **Base**: Communications Squad
+- **Table**: Client Info
+- **Operation**: Search
+- **Formula**: `={Member #} = '{{ $('Default Fields').first().json['Member #'] }}'`
+- **Purpose**: Searches for client information in Airtable.
+
+### 63. Merge
+- **Node Type**: Merge
+- **Purpose**: Merges data from different branches.
+
+### 64. Sermon Recap
+- **Node Type**: Postgres
+- **Operation**: Select
+- **Table**: `sms_sermon_recap`
+- **Columns**: Populates fields like `title`, `speaker`, `bg_music`, `created_at`, `user_email`, `design_link`, `sermon_date`, `deliverables`, `series_title`, `account_at_id`, and `submission_id` using data from the `Detail Submission` node.
+- **Purpose**: Inserts or updates records in the `sms_sermon_recap` table in PostgreSQL.
+
+### 65. Create Main Task (Conditional for Sermon Recap)
+- **Node Type**: ClickUp
+- **Operation**: Create Task
+- **List**: `={{ $('Default Fields').first().json['ClickUp List ID'] }}`
+- **Name**: `={{ $('Default Fields').first().json['Member #'] }} - SRP Video SRP Video {{ (function() { ... })() }}` (Dynamic date calculation for Sunday)
+- **Space**: `={{ $('Default Fields').first().json['ClickUp Space ID'] }}`
+- **Folder**: `={{ $('Default Fields').first().json['ClickUp Folder ID'] }}`
+- **Additional Fields**: Includes tags and time estimate.
+- **Purpose**: Creates a ClickUp task for Sermon Recap Videos, with a name including the member number and a calculated date.
+
+### 66. Fix SRP Video (for Create SRP Video)
+- **Node Type**: Code
+- **JS Code**: Cleans and formats raw content specifically for Sermon Recap Videos.
+- **Purpose**: Prepares the content for the SRP Video task.
+
+### 67. SRP Video Content (for Create SRP Video)
+- **Node Type**: HTTP Request
+- **URL**: `https://sis1.thesqd.com/webhook/desc-updated-new`
+- **Method**: POST
+- **JSON Body**: Sends the processed SRP video content and the task ID for the SRP Video task.
+- **Purpose**: Updates the description of the SRP Video task.
+
+### 68. Link SRP Video (for Create SRP Video)
+- **Node Type**: ClickUp
+- **Operation**: Task Dependency
+- **Task**: `={{ $('Create SRP Video').first().json.id }}`
+- **Depends On Task**: `={{ $('Create Main Task').first().json.id }}`
+- **Purpose**: Creates a dependency link in ClickUp, making the SRP Video task dependent on the main task.
+
+### 69. Merge (for SRP Video)
+- **Node Type**: Merge
+- **Purpose**: Merges data related to SRP Video processing.
+
+### 70. Create Project Details (for Subtask)
+- **Node Type**: Airtable
+- **Base**: Project Requests
+- **Table**: Project Details
+- **Operation**: Create
+- **Columns**: Populates fields for subtasks, including `Account`, `Subtask?` (set to true), `Project Type`, `Submission ID`, `Parent Project`, `Submission Time`, `ClickUp Task Link`, and `Task Content (Raw)`.
+- **Purpose**: Records subtask details in Airtable.
+
+### 71. Filter (for Subtask)
+- **Node Type**: Filter
+- **Conditions**: Checks if `PD ID` and `Subtask Content` IDs exist.
+- **Purpose**: Ensures necessary IDs are available before proceeding with subtask creation.
+
+### 72. Subtask Record (for Subtask)
+- **Node Type**: Airtable
+- **Base**: Project Requests
+- **Table**: Project Details
+- **Operation**: Create
+- **Columns**: Creates a "Project Details" record specifically marked as a subtask, linking it to a parent project and providing task content.
+- **Purpose**: Records subtask information in Airtable.
+
+### 73. PD ID (for Subtask)
+- **Node Type**: Set
+- **Assignments**:
+    - `pd_id`: `={{ $json.id }}`
+- **Purpose**: Extracts the ID of the "Project Details" record for the parent task.
+
+### 74. Update PD (for Subtask)
+- **Node Type**: Airtable
+- **Base**: Project Requests
+- **Table**: Project Details
+- **Operation**: Update
+- **Columns**:
+    - `id`: `={{ $('Get PD').first().json.id }}`
+    - `ClickUp Task Link`: `={{ $('Create Main Task').first().json.id }}`
+- **Purpose**: Updates the "Project Details" record with the ClickUp Task ID of the main task.
+
+### 75. If (for Subtask)
+- **Node Type**: If
+- **Conditions**: Checks if `Create Main Task` and a specific project type (Sermon Series or Coaching Call) have been executed.
+- **Purpose**: Conditional logic to potentially skip subtask creation or related steps.
+
+### 76. Create Subtask (for Subtask)
+- **Node Type**: ClickUp
+- **Operation**: Create Task
+- **List**: Dynamically determined.
+- **Name**: `={{ $('Fix Subtask Details').item.json.title }}`
+- **Parent Task ID**: `={{ $('Create Main Task').first().json.id }}`
+- **Additional Fields**: Includes tags, status, due date, assignee IDs, and time estimate.
+- **Purpose**: Creates the subtask in ClickUp.
+
+### 77. Subtask Content (for Subtask)
+- **Node Type**: HTTP Request
+- **URL**: `https://sis1.thesqd.com/webhook/desc-updated-new`
+- **Method**: POST
+- **JSON Body**: Sends the subtask content and the subtask ID.
+- **Purpose**: Updates the description of the subtask in ClickUp.
+
+### 78. Set Department (for Subtask)
+- **Node Type**: ClickUp
+- **Operation**: Set Custom Field
+- **Task**: `={{ $json.id }}` (referring to the subtask)
+- **Field**: `423fe36b-7833-4b75-8685-51143b675dbe`
+- **Value**: `={{ ["c2d8a589-ef2d-4bfe-a944-90440ab00f2e"] }}`
+- **Purpose**: Sets the Department custom field for the subtask.
+
+### 79. Filter (for Subtask Content)
+- **Node Type**: Filter
+- **Conditions**: Checks if `PD ID` and `Subtask Content` IDs exist.
+- **Purpose**: Filters for successful subtask content processing.
+
+### 80. Merge (for Subtask Content)
+- **Node Type**: Merge
+- **Purpose**: Merges data related to subtask content.
+
+### 81. Filter (for Final Subtask Record)
+- **Node Type**: Filter
+- **Conditions**: Checks if `PD ID` and `Subtask Content` IDs exist.
+- **Purpose**: Filters for successful subtask record creation.
+
+### 82. Subtask Record (for Final Subtask Record)
+- **Node Type**: Airtable
+- **Base**: Project Requests
+- **Table**: Project Details
+- **Operation**: Create
+- **Columns**: Creates a "Project Details" record for the subtask, linking it to the parent project and including raw task content.
+- **Purpose**: Records the subtask in Airtable.
+
+---
+
+## Data Flow Summary
+
+The workflow begins with a webhook trigger receiving submission data from Fillout. This data is then used to fetch detailed submission information, account details, coach information, and guest user IDs. Based on the type of project identified in the submission, the workflow branches out to handle different project types (Sermon Series, Coaching Call, Event, Holiday, GSMP, Sermon Recap). For each project type, it prepares specific fields using "Set" nodes, fetches relevant data from Airtable and PostgreSQL, and then creates a main task in ClickUp. It also updates the `prf_project_submissions` table in PostgreSQL and creates corresponding "Project Details" records in Airtable. Subtasks are created and managed as needed, with their content and details being dynamically generated and updated. Finally, Slack notifications are sent for new submissions and specific events.
+
+## Error Handling
+
+- **Error Workflow**: `6hQvch97iNP5ny1i`
+- **Execution Mode**: `production`
+- **Save Execution Progress**: Enabled
+
+## Authentication
+
+- **Fillout**: Generic HTTP Header Auth (Credential ID: `0y2CuBxydTDv4pks`)
+- **ClickUp**: OAuth2 (Credential ID: `kJqUeeypoU0fdgXR`)
+- **Airtable**: Airtable OAuth2 API (Credential ID: `jBHiG9dORxXca5We`)
+- **Postgres**: Squad Data (Credential ID: `ckrZxGCgviCXh9wc`)
+- **Slack**: n8n (Bot) (Credential ID: `ZSsgkHzZgg4NNTmc`)
