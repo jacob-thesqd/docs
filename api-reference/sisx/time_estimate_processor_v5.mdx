@@ -1,7 +1,6 @@
-```markdown
 ---
 title: 'Time Estimate Processor V5'
-description: 'This workflow processes time estimate data, potentially from Supabase, to manage task assignments and queue numbers. It acts as a trigger for other processes, handling data enrichment and conditional logic based on task attributes. The workflow is designed to be initiated by a webhook, likely from Supabase events.'
+description: 'This workflow processes time estimate data, likely from a task management system like ClickUp, triggered by webhooks. It identifies relevant tasks based on tags and team assignments, checks for existing time estimates, and queues tasks for processing. It also handles potential duplicates and updates queue numbers.'
 api: "POST /trigger-estimate"
 ---
 
@@ -9,207 +8,22 @@ api: "POST /trigger-estimate"
 
 - **Workflow ID**: `97y1a4k8WyTqCDlB`
 - **Name**: Time Estimate Processor V5
-- **Server**: Not specified (runs within n8n)
+- **Server**: Not explicitly stated, but webhook URL suggests 'sisx.thesqd.com' and 'sis2.thesqd.com' are involved.
 - **Status**: Active
+- **Created**: November 26, 2024
+- **Last Updated**: July 7, 2025
 - **Tags**: Supabase
 
 ## Webhook Endpoint
 
 ```
-POST /trigger-estimate
+POST https://sisx.thesqd.com/webhook/trigger-estimate
 ```
 
-## Workflow Process
+## Supabase Trigger Setup
 
-### 1. Sticky Note
-- **Purpose**: This sticky note contains SQL code for creating a Supabase function (`time_estimate_processor_v2`) and associated triggers. This function is designed to check specific conditions on `tasks` and `tag_history` tables in Supabase and, if conditions are met, send a POST request to a specified webhook URL (`https://hkdk.events/cum8jgusyfp155`). The triggers ensure this function is executed after inserts into `tag_history`.
+The following SQL script should be pasted into your Supabase query editor to set up the trigger:
 
-### 2. Webhook Trigger
-- **Path**: `trigger-estimate`
-- **Method**: POST
-- **Purpose**: This node receives incoming webhook requests, which are expected to contain task-related data. It's the starting point of the workflow.
-- **Parameters**:
-  - `path`: `trigger-estimate`
-  - `options`: {}
-  - `httpMethod`: `POST`
-  - `responseData`: `noData`
-  - `responseMode`: `lastNode`
-
-### 3. Edit Fields
-- **Purpose**: This node prepares data for subsequent processing, specifically by creating a unique `item_id` based on the `tag_after`, `task_id`, and the Hookdeck attempt count. This is likely used for duplicate detection or tracking.
-- **Parameters**:
-  - `assignments`:
-    - `id`: `cbd406ac-9c0a-4d44-95d5-477cf443fe5c`
-    - `name`: `item_id`
-    - `type`: `string`
-    - `value`: `={{ $json.body[0].tag_after }}_{{ $json.body[0].account }}_attempt-{{ $json.headers[\"x-hookdeck-attempt-count\"] }}`
-
-### 4. Remove Duplicates
-- **Purpose**: This node aims to remove duplicate executions of the workflow based on a previously generated `item_id`. It leverages n8n's ability to track seen items across executions.
-- **Parameters**:
-  - `options`: {}
-  - `operation`: `removeItemsSeenInPreviousExecutions`
-  - `dedupeValue`: `={{ $json.item_id }}`
-- **Always Output Data**: `true`
-
-### 5. Store Task ID
-- **Purpose**: This node saves key information from the incoming webhook payload (task ID, account, and task name) into n8n's execution data for later use or persistence.
-- **Parameters**:
-  - `dataToSave`:
-    - `values`:
-      - `key`: `taskid`, `value`: `={{ $json.body[0].task_id }}`
-      - `key`: `account`, `value`: `={{ $json.body[0].account }}`
-      - `key`: `taskname`, `value`: `={{ $json.body[0].name }}`
-
-### 6. If1
-- **Purpose**: This node checks if the `keys()` of the incoming data are not empty. This is likely a preliminary check to ensure there is data to process before proceeding.
-- **Parameters**:
-  - `conditions`:
-    - `combinator`: `and`
-    - `conditions`:
-      - `id`: `1179a5a3-5561-4e05-a50a-9c159dc90adf`
-      - `operator`: `{ "type": "array", "operation": "notEmpty", "singleValue": true }`
-      - `leftValue`: `={{ $json.keys() }}`
-
-### 7. Time Data Helper
-- **Purpose**: This node executes another n8n workflow named "Time Estimate Processor Time Data Helper" (`TUL93CDbrOZP24aU`). This is a sub-workflow likely responsible for fetching or processing time-related data for the current task.
-- **Parameters**:
-  - `mode`: `each`
-  - `options`: `{ "waitForSubWorkflow": true }`
-  - `workflowId`: `TUL93CDbrOZP24aU`
-
-### 8. Estimate Helper
-- **Purpose**: This node executes another n8n workflow named "Time Estimate Helper" (`lGjC2quFOtKA4fFP`). This sub-workflow is probably involved in calculating or retrieving time estimates for tasks.
-- **Parameters**:
-  - `mode`: `each`
-  - `options`: `{ "waitForSubWorkflow": true }`
-  - `workflowId`: `lGjC2quFOtKA4fFP`
-
-### 9. Execution Data2
-- **Purpose**: This node marks the execution as a duplicate if the `If1` condition was false, indicating that no valid data keys were found.
-- **Parameters**:
-  - `dataToSave`:
-    - `values`:
-      - `key`: `duplicate`, `value`: `true`
-- **Always Output Data**: `true`
-
-### 10. Filter
-- **Purpose**: This node filters the data based on several conditions related to the recipient department, the presence of time estimates, and an auto-assign override.
-- **Parameters**:
-  - `conditions`:
-    - `combinator`: `and`
-    - `conditions`:
-      - `id`: `0294b50b-ed08-462d-b20d-e579dff7309c`: `resp_dept` is 'Design Squad' OR 'Video Squad'.
-      - `id`: `8a604574-a59d-4e7f-838e-2cad47e7c0cd`: `time_estimate` exists.
-      - `id`: `a00cb49b-b7cd-47a8-98bf-8c5f26e06a5d`: `unassigned` is true.
-      - `id`: `d9a63ced-fb3c-4e19-ba59-3c9e53ae3aa5`: `auto_assign_override` is NOT true.
-
-### 11. If
-- **Purpose**: This node checks if the `status` of the data is 'triggered'. This likely controls whether the subsequent Supabase query to get queued items should proceed.
-- **Parameters**:
-  - `conditions`:
-    - `combinator`: `and`
-    - `conditions`:
-      - `id`: `140101d6-7725-493c-8260-55bdfc4c2d88`: `status` equals 'triggered'.
-
-### 12. AA Trigger
-- **Purpose**: This node executes another n8n workflow named "AA Trigger Helper v2" (`UHdeJMNPJTdY6QA4`). This sub-workflow is likely responsible for triggering some automated assignment process.
-- **Parameters**:
-  - `options`: `{ "waitForSubWorkflow": true }`
-  - `workflowId`: `UHdeJMNPJTdY6QA4`
-- **Retry on Fail**: `true`
-- **Wait Between Tries**: `5000`
-
-### 13. Wait
-- **Purpose**: This node introduces a delay before proceeding. The `webhookId` suggests it might be related to waiting for a specific event or confirmation.
-- **Parameters**: None specified.
-
-### 14. Supabase
-- **Purpose**: This node queries the `aa_log` table in Supabase to find tasks that are in the 'queued' status, belong to a specific account, and are not the current task being processed. This is likely to determine the current queue order.
-- **Parameters**:
-  - `filters`:
-    - `conditions`:
-      - `keyName`: `account`, `keyValue`: `={{ $json.account }}`, `condition`: `eq`
-      - `keyName`: `status`, `keyValue`: `queued`, `condition`: `eq`
-      - `keyName`: `task_id`, `keyValue`: `={{ $json.task_id }}`, `condition`: `neq`
-  - `tableId`: `aa_log`
-  - `matchType`: `allFilters`
-  - `operation`: `getAll`
-  - `returnAll`: `true`
-- **Credentials**: `Supabase` (NifWy1sih0M2biEc)
-
-### 15. Merge1
-- **Purpose**: This node is configured to choose a branch based on some condition, likely related to whether the Supabase query returned any results or based on the outcome of the `AA Trigger` sub-workflow.
-- **Parameters**:
-  - `mode`: `chooseBranch`
-
-### 16. Edit Fields2
-- **Purpose**: This node calculates the `queue_num` by adding 1 to the count of items returned from the previous Supabase query. This determines the next available queue number for the current task.
-- **Parameters**:
-  - `assignments`:
-    - `id`: `2934df32-d70a-46bd-9256-f5cfaddfb251`
-    - `name`: `queue_num`
-    - `type`: `number`
-    - `value`: `={{ $('Supabase').all().length + 1 }}`
-  - `includeOtherFields`: `true`
-
-### 17. AA Trigger - Queued
-- **Purpose**: This node executes the "AA Trigger Helper v2" workflow again, likely to perform a subsequent action now that the queue number has been determined.
-- **Parameters**:
-  - `options`: `{ "waitForSubWorkflow": true }`
-  - `workflowId`: `UHdeJMNPJTdY6QA4`
-
-### 18. Refresh Queue Numbers
-- **Purpose**: This node sends an HTTP POST request to `https://sis2.thesqd.com/webhook/refresh-queues`. This is likely a call to an external service to update queue numbers or related logic.
-- **Parameters**:
-  - `url`: `https://sis2.thesqd.com/webhook/refresh-queues`
-  - `method`: `POST`
-  - `options`: {}
-  - `sendBody`: `true`
-  - `bodyParameters`:
-    - `parameters`:
-      - `name`: `account`, `value`: `={{ $json.account }}`
-- **On Error**: `continueRegularOutput`
-- **Disabled**: `true`
-
-### 19. Wait1
-- **Purpose**: This node introduces another delay. Similar to the previous 'Wait' node, its purpose might be related to event synchronization or processing.
-- **Parameters**: None specified.
-
-## Data Flow
-
-Webhook Trigger → Edit Fields → Remove Duplicates → Store Task ID → If1 → [Time Data Helper, Estimate Helper] → Execution Data2 (if If1 fails) → Filter → If → AA Trigger → Wait → Supabase → Merge1 → Edit Fields2 → AA Trigger - Queued → Refresh Queue Numbers → Wait1
-
-## Error Handling
-
-- **Error Workflow**: `p96PdgC9o16nuAdv`
-- **Execution Order**: `v1`
-- **Execution Timeout**: `58` seconds
-- The `Refresh Queue Numbers` node is configured to `continueRegularOutput` on error.
-
-## Authentication
-
-### Supabase
-- **Credentials**: `Squad Data` (ID: `NifWy1sih0M2biEc`)
-
-## Usage Examples
-
-### Webhook Payload
-A sample webhook payload that would trigger this workflow might look like this:
-
-```json
-{
-  "task_id": "86dx6nmyf",
-  "account": 3583,
-  "name": "Sunday Sermon Recap - Social Media Graphics",
-  "tag_after": "social1-3",
-  "created_at": "2025-07-07",
-  "row_created": "2025-07-07T17:12:54.280022+00:00"
-}
-```
-
-### Supabase Trigger Function (SQL)
-The SQL code provided in the sticky note is crucial for setting up Supabase to automatically trigger this n8n workflow when changes occur in `tag_history` or `tasks`.
 ```sql
 -- First, create the function to check conditions and send webhook
 CREATE OR REPLACE FUNCTION time_estimate_processor_v2(task_id_input text) RETURNS void AS $$
@@ -279,5 +93,174 @@ CREATE TRIGGER tag_history_time_estimate_processor_v2
     ON tag_history
     FOR EACH ROW
     EXECUTE FUNCTION time_estimate_processor_v2();
+
+```
+
+## Workflow Process
+
+### 1. Sticky Note
+- **Purpose**: This sticky note contains crucial SQL code for setting up a Supabase trigger. It defines a PostgreSQL function (`time_estimate_processor_v2`) that checks task conditions and sends a webhook, and a trigger function to call this processor when new data is inserted into `tag_history`.
+
+### 2. Webhook Trigger
+- **Path**: `/trigger-estimate`
+- **Method**: POST
+- **Purpose**: Receives incoming webhook requests to initiate the workflow. It's configured to expect JSON data in the body.
+
+### 3. Edit Fields
+- **Purpose**: Extracts and formats a unique identifier (`item_id`) from the incoming webhook data and request headers, likely for duplicate detection.
+- **Parameters**:
+  - **item_id**: `={{ $json.body[0].tag_after }}_{{ $json.body[0].task_id }}_attempt-{{ $json.headers[\"x-hookdeck-attempt-count\"] }}`
+
+### 4. Remove Duplicates
+- **Purpose**: Prevents duplicate processing of tasks by checking if a task's `item_id` has been seen in previous workflow executions.
+- **Parameters**:
+  - **dedupeValue**: `={{ $json.item_id }}`
+  - **operation**: `removeItemsSeenInPreviousExecutions`
+
+### 5. If1
+- **Purpose**: Checks if there are any keys in the processed data, likely to determine if there's data to proceed with.
+- **Parameters**:
+  - **conditions**:
+    - **combinator**: `and`
+    - **conditions**:
+      - **leftValue**: `={{ $json.keys() }}`
+      - **operator**: `notEmpty`
+
+### 6. Time Data Helper
+- **Purpose**: Executes another n8n workflow (`TUL93CDbrOZP24aU` - "Time Estimate Processor Time Data Helper") for each item, likely to gather or process specific time-related data.
+- **Parameters**:
+  - **mode**: `each`
+  - **waitForSubWorkflow**: `true`
+
+### 7. Estimate Helper
+- **Purpose**: Executes another n8n workflow (`lGjC2quFOtKA4fFP` - "Time Estimate Helper") for each item, likely to perform further processing or calculations related to time estimates.
+- **Parameters**:
+  - **mode**: `each`
+  - **waitForSubWorkflow**: `true`
+
+### 8. Execution Data2
+- **Purpose**: Stores a 'duplicate' flag as `true` in the execution data. This node is likely reached when the `If1` condition is not met, indicating a potential duplicate or an empty data set.
+- **Parameters**:
+  - **dataToSave**:
+    - **duplicate**: `true`
+
+### 9. Filter
+- **Purpose**: Filters the data based on several criteria related to responsible department, time estimate presence, and an auto-assign override.
+- **Parameters**:
+  - **conditions**:
+    - **combinator**: `and`
+    - **conditions**:
+      - **leftValue**: `={{ $json.resp_dept == 'Design Squad' || $json.resp_dept == 'Video Squad' }}` (checks if `resp_dept` is 'Design Squad' or 'Video Squad')
+      - **operator**: `true`
+      - **leftValue**: `={{ $json.time_estimate }}` (checks if `time_estimate` exists)
+      - **operator**: `exists`
+      - **leftValue**: `={{ $json.unassigned }}` (checks if `unassigned` is true)
+      - **operator**: `true`
+      - **leftValue**: `={{ $json.auto_assign_override }}` (checks if `auto_assign_override` is not equal to true)
+      - **operator**: `notEquals`
+
+### 10. If
+- **Purpose**: Checks if the `status` field is equal to 'triggered'. This likely determines the next step based on the outcome of the filtering.
+- **Parameters**:
+  - **conditions**:
+    - **combinator**: `and`
+    - **conditions**:
+      - **leftValue**: `={{ $json.status }}`
+      - **operator**: `equals`
+      - **rightValue**: `triggered`
+
+### 11. AA Trigger
+- **Purpose**: Executes another n8n workflow (`UHdeJMNPJTdY6QA4` - "AA Trigger Helper v2") with retry logic, likely to trigger an automated assignment process.
+- **Parameters**:
+  - **options**:
+    - **waitForSubWorkflow**: `true`
+  - **retryOnFail**: `true`
+  - **waitBetweenTries**: `5000`
+
+### 12. Wait
+- **Purpose**: Pauses the workflow execution for a specified duration. This is part of the retry mechanism for the "AA Trigger" sub-workflow.
+- **Parameters**: (No specific parameters shown, likely default wait time)
+
+### 13. Supabase
+- **Purpose**: Queries the `aa_log` table in Supabase to find existing entries for the same account and task, but with a different status or where the current task is not yet queued. This helps in managing the queue.
+- **Parameters**:
+  - **operation**: `getAll`
+  - **tableId**: `aa_log`
+  - **filters**:
+    - **conditions**:
+      - **keyName**: `account`, **keyValue**: `={{ $json.account }}`, **condition**: `eq`
+      - **keyName**: `status`, **keyValue**: `queued`, **condition**: `eq`
+      - **keyName**: `task_id`, **keyValue**: `={{ $json.task_id }}`, **condition**: `neq`
+
+### 14. Merge1
+- **Purpose**: Merges the results from different branches of the workflow, likely to combine processed data before the next steps.
+- **Parameters**:
+  - **mode**: `chooseBranch`
+
+### 15. Edit Fields2
+- **Purpose**: Calculates and sets the `queue_num` based on the number of existing items found in the Supabase query plus one.
+- **Parameters**:
+  - **assignments**:
+    - **queue_num**: `={{ $('Supabase').all().length + 1 }}`
+
+### 16. AA Trigger - Queued
+- **Purpose**: Executes the "AA Trigger Helper v2" workflow again, this time likely for tasks that have been identified as needing to be queued.
+- **Parameters**:
+  - **mode**: `each`
+  - **waitForSubWorkflow**: `true`
+
+### 17. Refresh Queue Numbers
+- **Purpose**: Makes an HTTP POST request to a webhook endpoint (`https://sis2.thesqd.com/webhook/refresh-queues`) to update queue numbers. This is likely triggered when certain conditions are met after the Supabase query.
+- **Parameters**:
+  - **url**: `https://sis2.thesqd.com/webhook/refresh-queues`
+  - **method**: `POST`
+  - **sendBody**: `true`
+  - **bodyParameters**:
+    - **parameters**:
+      - **name**: `account`, **value**: `={{ $json.account }}`
+
+### 18. Wait1
+- **Purpose**: Pauses workflow execution after attempting to refresh queue numbers.
+- **Parameters**: (No specific parameters shown)
+
+## Data Flow
+
+Webhook Trigger → Edit Fields → Remove Duplicates → If1 → (Time Data Helper | Estimate Helper) → (Filter → If → AA Trigger → Wait) | (Execution Data2) → Supabase → Merge1 → Edit Fields2 → AA Trigger - Queued → Refresh Queue Numbers → Wait1
+
+## Error Handling
+
+- **Error Workflow**: `p96PdgC9o16nuAdv`
+- **Execution Order**: `v1`
+- **Execution Timeout**: 58 seconds
+
+## Authentication
+
+- **Supabase**: Uses a credential with ID `NifWy1sih0M2biEc` named "Squad Data".
+
+## Usage Examples
+
+### Webhook Payload Example
+When a new task is updated with a relevant tag, a webhook might send a payload like this:
+
+```json
+{
+  "body": [
+    {
+      "name": "Sunday Sermon Recap - Social Media Graphics",
+      "account": 3583,
+      "task_id": "86dx6nmyf",
+      "tag_after": "social1-3",
+      "created_at": "2025-07-07",
+      "row_created": "2025-07-07T17:12:54.280022+00:00"
+    }
+  ],
+  "query": {},
+  "params": {},
+  "headers": {
+    "x-hookdeck-attempt-count": "3",
+    "x-hookdeck-source-name": "Supabase",
+    "x-hookdeck-connection-name": "time-estimate-processor"
+  }
+}
 ```
 ```
