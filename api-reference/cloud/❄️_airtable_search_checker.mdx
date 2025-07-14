@@ -1,6 +1,6 @@
 ---
-title: 'Airtable Search Checker'
-description: 'This N8N workflow checks for the existence of records in an Airtable base based on a provided formula. It is triggered via a webhook and returns the search results or indicates if no records were found.'
+title: '❄️ Airtable Search Checker Workflow'
+description: 'This workflow checks for records in Airtable based on provided query parameters. It receives a webhook request with Airtable base ID, table ID, and a formula to search by. It then performs the search and returns the results or an error.'
 api: "POST /check-airtable-record"
 ---
 
@@ -20,63 +20,50 @@ POST https://churchmediasquad.app.n8n.cloud/webhook/check-airtable-record
 
 ## Workflow Process
 
-### 1. Webhook Trigger
+### 1. Sticky Note
+- **Purpose**: This sticky note serves as a critical warning for developers, emphasizing that changing the webhook's path will impact multiple workflows. It is a crucial reminder for maintaining system stability.
+
+### 2. Webhook Trigger
 - **Path**: `/check-airtable-record`
-- **Purpose**: This is the entry point of the workflow, triggered by an incoming webhook request. It expects query parameters for `base_id`, `table_id`, and `formula` to perform an Airtable search.
+- **Method**: POST
+- **Response Mode**: `responseNode`
+- **Purpose**: This node acts as the entry point for the workflow, receiving incoming webhook requests. It expects query parameters for `base_id`, `table_id`, and `formula` to specify the Airtable search criteria.
 
-### 2. Airtable Search Node
-- **Type**: Airtable Node
-- **Purpose**: Searches an Airtable base for records matching a given formula.
-- **Parameters**:
-  - **Base**: Dynamically set using the `base_id` from the webhook query: `={{ $('Webhook').first().json.query.base_id }}`
-  - **Table**: Dynamically set using the `table_id` from the webhook query: `={{ $('Webhook').first().json.query.table_id }}`
-  - **Operation**: `search`
-  - **Filter By Formula**: Dynamically set using the `formula` from the webhook query: `={{ $('Webhook').first().json.query.formula }}`
-- **Authentication**: Airtable OAuth2 API (Credential ID: `jBHiG9dORxXca5We`, Name: `Acee's Connection`)
+### 3. Airtable Search
+- **Base**: Dynamically set using the `base_id` from the webhook query (`={{ $('Webhook').first().json.query.base_id }}`).
+- **Table**: Dynamically set using the `table_id` from the webhook query (`={{ $('Webhook').first().json.query.table_id }}`).
+- **Operation**: `search`
+- **Authentication**: Uses the 'Acee's Connection' Airtable OAuth2 API credential.
+- **Filter By Formula**: Dynamically set using the `formula` from the webhook query (`={{ $('Webhook').first().json.query.formula }}`).
+- **Purpose**: This node queries the specified Airtable base and table using the provided formula to find matching records.
 
-### 3. If Node
-- **Type**: If Node
-- **Purpose**: Checks if the Airtable search returned any records.
-- **Conditions**:
-  - **Left Value**: `={{ $json.id }}`
-  - **Operator**: `exists` (checks if the ID field exists, implying a record was found)
-  - **Right Value**: (empty)
-  - **Combinator**: `and`
+### 4. If1 (Conditional Logic)
+- **Conditions**: Checks if the `id` field exists in the results from the Airtable search.
+- **Purpose**: This node determines whether the Airtable search returned any records. If a record with an `id` is found, it proceeds to the "Respond to Webhook" node; otherwise, it routes to the "Error" node.
 
-### 4. Respond to Webhook Node
-- **Type**: Respond to Webhook Node
-- **Purpose**: If the "If" node condition is met (meaning records were found), this node sends back all the incoming items (the Airtable search results) as the webhook response.
+### 5. Respond to Webhook (Success)
+- **Respond With**: `allIncomingItems`
+- **Purpose**: If the "If1" condition is met (meaning records were found), this node sends the search results back as the webhook response.
 
-### 5. Error Node
-- **Type**: Respond to Webhook Node
-- **Purpose**: If the "If" node condition is not met (meaning no records were found), this node sends back a "no data" response with an HTTP status code of 400, indicating the record was not found.
-
-### 6. Sticky Note
-- **Type**: Sticky Note
-- **Purpose**: This sticky note serves as a critical warning to not alter the webhook configuration, as it is used by multiple other workflows.
-- **Content**:
-```
-### DO NOT TOUCH!
-**Changing the webhook will change it in A LOT of workflows.**
-```
+### 6. Error (Respond to Webhook)
+- **Response Code**: `400`
+- **Respond With**: `noData`
+- **Purpose**: If the "If1" condition is not met (no records found or an error occurred), this node sends a "Bad Request" response with no data back to the webhook caller. This node is set to execute only once.
 
 ## Data Flow
 
-```
-Webhook Trigger -> Airtable Search -> If Condition -> (Respond to Webhook OR Error Node)
-```
+Webhook Trigger -> Airtable Search -> If1 (Conditional Logic)
+    - If True: Respond to Webhook (Success)
+    - If False: Error (Respond to Webhook)
 
 ## Authentication
 
 ### Airtable
-- **Type**: Airtable OAuth2 API
+- **Type**: OAuth2 API
 - **Credential ID**: `jBHiG9dORxXca5We`
 - **Credential Name**: `Acee's Connection`
 
 ## Error Handling
 
-- **Error Workflow**: `6hQvch97iNP5ny1i`
-- **Execution Order**: `v1`
-- **Save Execution Progress**: Enabled
-- **Execution Timeout**: 300 seconds
+- **Error Workflow**: `6hQvch97iNP5ny1i` (This workflow is triggered if an unhandled error occurs.)
 ```
