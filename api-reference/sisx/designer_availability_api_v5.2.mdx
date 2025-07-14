@@ -1,0 +1,216 @@
+---
+title: "Designer Availability API v5.2"
+description: "This workflow automates the process of assigning designers based on availability, preferences, and project requirements. It triggers via a webhook, retrieves designer availability, checks for blackouts, analyzes estimates, and ultimately logs the chosen designer and related data into a PostgreSQL database."
+api: "POST /availability-api"
+---
+
+## Workflow Details
+
+- **Workflow ID**: `LMWH3l3IaJmoIyRQ`
+- **Status**: Active
+- **Created**: May 1, 2025
+- **Last Updated**: June 24, 2025
+
+## Webhook Endpoint
+
+```
+POST https://sisx.thesqd.com/webhook/availability-api
+```
+
+## Workflow Process
+
+### 1. Webhook Trigger
+- **Path**: `/availability-api`
+- **Method**: POST
+- **Purpose**: Receives project details and assignment criteria via a webhook call.
+
+### 2. Execution Data
+- **Purpose**: Stores specific execution data, such as `taskId`, for later use or logging.
+- **Data to Save**:
+    - `taskId`: `={{ $json.body.taskId || $json.body.task_id }}`
+
+### 3. Edit Fields1
+- **Purpose**: Prepares the incoming webhook JSON body for further processing.
+- **Mode**: `raw`
+- **JSON Output**: `={{ $json.body }}`
+
+### 4. Check Estimate is Correct
+- **Type**: Execute Workflow (Sub-workflow)
+- **Workflow Name**: `Designer Availability Helper`
+- **Workflow ID**: `akKjBy4705NebBo3`
+- **Mode**: `each`
+- **Purpose**: Retrieves designer availability data, likely filtering by the project's time estimate.
+
+### 5. First 2 Days Out
+- **Type**: Limit
+- **Purpose**: Limits the number of designer availability results to a specific count.
+- **Max Items**: `={{ $input.all().indexOf($input.all().find(i=>i.json.days_out > $input.all().find(i=>i.json.days_out >  $input.first().json.days_out).json.days_out))}}`
+
+### 6. Blackouts
+- **Type**: Execute Workflow (Sub-workflow)
+- **Workflow Name**: `Blackout Period Check`
+- **Workflow ID**: `AHmicjqV6Up5775I`
+- **Mode**: `each`
+- **Purpose**: Checks for any blackout periods that might affect designer availability for the project.
+
+### 7. Switch
+- **Type**: Switch
+- **Purpose**: Routes the execution based on designer selection criteria.
+- **Rules**:
+    - **Output Key**: `prev`
+        - **Conditions**: `={{ $json.prev_des == 1 && !$('Webhook').item.json.body.high_usage}}` (Checks if it's a previous designer and no high usage flag)
+    - **Output Key**: `preference`
+        - **Conditions**: `={{ $json.preference_score >= 2 && !$('Webhook').item.json.body.high_usage }}` (Checks if preference score is 2 or more and no high usage flag)
+    - **Fallback Output**: `top`
+
+### 8. Previous
+- **Type**: Respond to Webhook
+- **Purpose**: This node is used as an output target for the 'prev' branch of the Switch node. It doesn't send a response but allows the data to be passed along.
+- **Response Headers**:
+    - `exec_id`: `={{$execution.id}}`
+
+### 9. Preference >= 2
+- **Type**: Respond to Webhook
+- **Purpose**: This node is used as an output target for the 'preference' branch of the Switch node. It doesn't send a response but allows the data to be passed along.
+- **Response Headers**:
+    - `exec_id`: `={{$execution.id}}`
+
+### 10. Top
+- **Type**: Respond to Webhook
+- **Purpose**: This node is used as an output target for the 'top' (fallback) branch of the Switch node. It doesn't send a response but allows the data to be passed along.
+- **Response Headers**:
+    - `exec_id`: `={{$execution.id}}`
+
+### 11. Merge2
+- **Type**: Merge
+- **Purpose**: Combines the data from the different branches of the Switch node.
+- **Number of Inputs**: 3
+- **Always Output Data**: True
+
+### 12. Edit Fields
+- **Type**: Set
+- **Purpose**: Gathers and formats all the necessary data for logging, including designer information, project details, and availability counts.
+- **Assignments**:
+    - `task_id`: `={{ $('Webhook').first().json.body.taskId }}`
+    - `account`: `={{ $('Webhook').first().json.body.accountLink }}`
+    - `designer`: `={{ $('Previous').isExecuted ? $('Previous').first().json.username : ($('Preference >= 2').isExecuted ? $('Preference >= 2').first().json.username : ($('Top').isExecuted ? $('Top').first().json.username : null)) }}`
+    - `assignee_id`: `={{ $('Previous').isExecuted ? $('Previous').first().json.user_id : ($('Preference >= 2').isExecuted ? $('Preference >= 2').first().json.user_id : ($('Top').isExecuted ? $('Top').first().json.user_id : null)) }}`
+    - `all_choices`: `={{ $('Get Availabilities').all().map(item=>item.json) }}`
+    - `designer_data`: `={{ $('Previous').isExecuted ? $('Previous').first().json : ($('Preference >= 2').isExecuted ? $('Preference >= 2').first().json : ($('Top').isExecuted ? $('Top').first().json : null)) }}`
+    - `estimate`: `={{ $('Webhook').first().json.body.time_estimate }}`
+    - `first_date`: `={{ $('Get Availabilities').first().json.draft_date?.toDateTime().format('MMM. d, yyyy')}}`
+    - `draft_date`: `={{ $('Previous').isExecuted ? $('Previous').first().json.draft_date?.toDateTime().format('MMM. d, yyyy') : ($('Preference >= 2').isExecuted ? $('Preference >= 2').first().json.draft_date?.toDateTime().format('MMM. d, yyyy') : ($('Top').isExecuted ? $('Top').first().json.draft_date?.toDateTime().format('MMM. d, yyyy') : null)) }}`
+    - `first_2_days_count`: `={{ $('First 2 Days Out').all().length }}`
+
+### 13. Code
+- **Type**: Code
+- **Purpose**: Generates a human-readable explanation for why a particular designer was chosen, including details about availability, preferences, and project context.
+- **JavaScript Code**:
+```javascript
+// inputs
+const DESIGNER_DATA = $json.designer_data;
+const ACCOUNT = $json.account;
+const ALL_CHOICES = $json.all_choices;
+const ESTIMATE = $json.estimate;
+const FIRST_2_DAYS = $json.first_2_days_count;
+const DRAFT_DATE = $json.draft_date;
+const FIRST_DATE = $json.first_date;
+const DESIGNER_NAME = DESIGNER_DATA?.username?.split('(')[0].trim().replace(/^\./, '');
+
+// get string from preference score
+const getPreferenceType = (score) => {
+  switch (score) {
+    case 4:
+      return 'preferred & recommended'
+    case 0:
+      return 'not preferred'
+    case 3:
+      return 'recommended'
+    case 2:
+      return 'preferred'
+    default:
+      return '1'
+  }
+}
+
+const preferenceType = getPreferenceType(DESIGNER_DATA.preference_score);
+
+// generate statement for why designer was assigned
+const PREVIOUS_DESIGNER = DESIGNER_DATA.prev_des == 1 ? `they were a previous designer for account ${ACCOUNT}` : null;
+const NOT_PREVIOUS_PREF = `based on preference score **(score: ${DESIGNER_DATA.preference_score} - ${preferenceType})**`
+const NOT_PREVIOUS = `based on earliest availability`
+
+// if pref score > 1 use NOT_PREVIOUS_PREF else use NOT_PREVIOUS
+let becauseStatement;
+if (DESIGNER_DATA.preference_score > 1) {
+  becauseStatement = NOT_PREVIOUS_PREF
+} else {
+   becauseStatement = NOT_PREVIOUS
+}
+
+// generate final message
+const message = `${DESIGNER_NAME} was chosen on due date: ${DRAFT_DATE} (${DESIGNER_DATA.days_out} workdays out) ${becauseStatement}. At the time of assignment, they had ${DESIGNER_DATA.minutes_day} total mins available, and ${DESIGNER_DATA.sched} mins already scheduled. After this task was assigned, ${DESIGNER_NAME} will be left with ${Number(DESIGNER_DATA.time_avail)-ESTIMATE} mins available. The execution found ${ALL_CHOICES.length} possible options, with the earliest due date being ${FIRST_DATE}, whilst only ${FIRST_2_DAYS} designers were available in the first 2 workdays out.`
+
+const message_md = `**${DESIGNER_NAME}** was chosen on due date: **${DRAFT_DATE} (${DESIGNER_DATA.days_out} workdays out)** ${becauseStatement}. At the time of assignment, they had **${DESIGNER_DATA.minutes_day} total mins available**, and **${DESIGNER_DATA.sched} mins already scheduled**. After this task was assigned, ${DESIGNER_NAME} will be left with **${Number(DESIGNER_DATA.time_avail)-ESTIMATE} mins available**. The execution found **${ALL_CHOICES.length} possible options**, with the **earliest due date being ${FIRST_DATE}**, whilst only ${FIRST_2_DAYS} designers were available in the first 2 workdays out.`
+
+// return data for output
+return {
+  message:message,
+  message_md:message_md
+}
+```
+
+### 14. Merge3
+- **Type**: Merge
+- **Purpose**: Combines the processed data from the 'Edit Fields' and 'Code' nodes.
+- **Mode**: `combine`
+- **Combine By**: `combineByPosition`
+
+### 15. Postgres1
+- **Type**: PostgreSQL
+- **Table**: `aa_decision_log`
+- **Schema**: `public`
+- **Operation**: Insert
+- **Purpose**: Logs the decision-making process and the chosen designer into the `aa_decision_log` table.
+- **Columns**:
+    - `task_id`: `={{ $('Webhook').first().json.body.taskId || $('Webhook').first().json.body.task_id}}`
+    - `designer`: `={{ $json.designer }}`
+    - `all_choices`: `={{ $json.all_choices }}`
+    - `assignee_id`: `={{ $json.assignee_id }}`
+    - `execution_id`: `={{ $execution.id }}`
+    - `designer_data`: `={{ $json.designer_data }}`
+    - `explanation_pl`: `={{ $json.message }}`
+    - `explanation_pl_md`: `={{ $json.message_md }}`
+- **Credentials**: `SquadData` (ID: `E1ZzQqtaKFgPZ75x`)
+
+## Data Flow
+
+`Webhook Trigger` → `Execution Data` → `Edit Fields1` → `Check Estimate is Correct` → `First 2 Days Out` → `Blackouts` → `Switch` → (`Previous` / `Preference >= 2` / `Top`) → `Merge2` → `Edit Fields` → `Code` → `Merge3` → `Postgres1`
+
+## Error Handling
+
+- **Continue on Error**: Not explicitly defined for most nodes, implying default error handling. Sub-workflows might have their own error handling configurations.
+
+## Authentication
+
+### PostgreSQL
+- **Credentials**: `SquadData` (ID: `E1ZzQqtaKFgPZ75x`)
+
+## Usage Examples
+
+### Webhook Payload
+A POST request to `/availability-api` with a JSON body containing project details like `taskId`, `accountLink`, `time_estimate`, and `high_usage` flag will trigger this workflow.
+
+```json
+{
+  "taskId": "86dx2j86n",
+  "resp_dept": "Design Squad",
+  "high_usage": false,
+  "accountLink": "2686",
+  "projectName": "Rock N Ribs Invite Card",
+  "project_type": "LayoutSM",
+  "time_estimate": 30,
+  "max_days_future": 15,
+  "min_days_future": 3
+}
+```
