@@ -1,0 +1,168 @@
+---
+title: "MMQ (Webhook - GET)"
+description: "This API setup documents a webhook trigger that listens for GET requests at /mmq, corresponding to incoming request data for processing and subsequent steps involving database and API interactions."
+api: "GET /mmq"
+---
+
+## Workflow Overview
+
+This workflow is initiated by an HTTP GET request to the `/mmq` endpoint. It serves as a trigger for further actions including querying a Postgres database, updating records, and responding accordingly. The workflow manages incoming request data, evaluates conditions, updates task statuses in third-party tools like ClickUp, and maintains synchronization with internal databases.
+
+---
+
+## Request Example
+
+<RequestExample>
+
+```bash Request
+curl --request GET \
+  --url https://sisx.thesqd.com/webhook/mmq
+```
+
+</RequestExample>
+
+---
+
+## Trigger: Webhook (`n8n-nodes-base.webhook`)
+
+The workflow is triggered by a GET Webhook node listening at the path `mmq`. It responds with raw response mode, capturing incoming GET requests to initiate the process.
+
+**Parameters:**
+- Path: `mmq`
+- Methods: `GET`, `PATCH`
+- Response Mode: `responseNode`
+- Multiple Methods: `true`
+
+---
+
+## Node: Sticky Note ("# Logo", `n8n-nodes-base.stickyNote`)
+
+Provides a visual annotation labeled "# Logo" with dimensions 1000x320, likely used as a visual indicator or title note in the workflow diagram.
+
+---
+
+## Nodes: Postgres Queries and Data Operations
+
+### Postgres2 (`n8n-nodes-base.postgres`)
+
+Executes a `SELECT * FROM get_account_task_stats({{ $json.account }}) JOIN accounts a ON a.account = {{ $json.account }}` to retrieve current account task statistics.
+
+**Parameters:**
+- Query: Fetch account task stats for the given account ID from incoming data.
+- Operation: `executeQuery`
+
+### Postgres7 (`n8n-nodes-base.postgres`)
+
+Drops and recreates materialized views to ensure data freshness:
+- `mv_future_dates`
+- `mv_latest_due_date`
+- `mv_latest_assignee_status`
+- `mv_latest_time_estimate`
+
+Uses SQL commands to refresh these views, ensuring subsequent queries have up-to-date information.
+
+### Postgres12 (`n8n-nodes-base.postgres`)
+
+Loads tasks information filtered by account with several nested joins:
+- Latest status changes
+- Latest assignee data
+- Due dates
+- Time tracking
+- Tags and department info
+- Filtering out deleted or archived tasks, and specific tags (like 'creativediscovery' or 'artdirection').
+
+**Operation:** `executeQuery`
+
+**Parameters:**
+Complex SQL query dynamically includes account value and filtering logic to retrieve current task statuses, assignments, tags, and other metadata.
+
+---
+
+## Node: Merge (`n8n-nodes-base.merge`)
+
+Merges data from the previous steps into a unified dataset for further evaluation and processing. It uses `combine` mode with position matching, primarily based on `task_id`.
+
+---
+
+## Node: Condition Check (`n8n-nodes-base.if`)
+
+Checks if `task_id` exists in the incoming data.
+
+**Parameters:**
+- Condition: `EXISTS` on `task_id` in the previous data.
+- Response if false: No further action.
+
+---
+
+## Node: ClickUp Update (`n8n-nodes-base.clickUp`)
+
+Updates task status back in ClickUp:
+- Sets the task status to `"on hold"` based on `task_id`.
+
+**Credentials:**
+- ClickUp API with saved token.
+
+---
+
+## Nodes: Set Data (`n8n-nodes-base.set`)
+
+### Edit Fields (`Edit Fields12` and `Edit Fields13`)
+
+- Assigns `task_id`, `status`, `active`, and `due_date` fields from previous data, aligning task metadata for later processing and responses.
+
+### Convert to File (`convertToFile`)
+
+Converts the `base64` binary data into a file format, likely for attaching or exporting.
+
+---
+
+## Nodes: Webhook Responders
+
+### Respond to Webhook (`respondToWebhook` for `play-pause`)
+
+Returns a JSON response indicating the status of the requested operation.
+
+---
+
+## Node: Switch (`n8n-nodes-base.switch`)
+
+Routes processing based on the `action` value (`pause` or `play`) received in message body, enabling different paths for handling task state changes.
+
+---
+
+## Nodes: Set Fields for Play/Pause (`Edit Fields9`)
+
+Sets `task_id`, `status`, and `active` fields accordingly, preparing for updates on task status.
+
+### Respond Webhook (`respondToWebhook`)
+
+Sends back simple confirmation messages after processing actions.
+
+---
+
+## Additional Postgres Nodes
+
+Various Postgres nodes (`Postgres13`, `Postgres14`, `Postgres17`, etc.) perform complex operations:
+- Updating logs (`mmq_log`)
+- Adjusting task statuses
+- Fetching historical data (`status_history`, `due_date_history`)
+- Managing Blackouts and scheduling constraints
+- Reordering queues and updating task metadata
+
+These nodes typically run on conditions or triggers within the workflow, sometimes disabled (`disabled:true`) for maintenance or future use.
+
+---
+
+## Final Operations: Completion & Data Synchronization
+
+Multiple nodes coordinate to:
+- Reorder queues
+- Update task statuses (`clickUp`)
+- Save logs
+- Respond to external systems
+
+Handling success states (`executionStatus":"success"`) complete the process cycle.
+
+---
+
+This SSH overview describes a highly dynamic, multi-node interaction system for managing tasks, scheduling, and communication across databases and third-party tools, with the webhook at `/mmq` acting as the primary trigger for the entire orchestration.
