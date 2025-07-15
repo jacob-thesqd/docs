@@ -1,0 +1,121 @@
+---  
+title: "Progress Bar Redirector (Webhook - GET)"  
+description: "This workflow handles incoming GET webhook requests to '/progress-bar-redirect'. Upon trigger, it responds with an HTML page that auto-redirects users to a specific Squad queue URL, with a manual button fallback."  
+api: "GET /progress-bar-redirect"  
+---  
+
+<Card title="Progress Bar Redirector" icon="link" href="https://sisx.thesqd.com/workflow/8y8bzEOu0Vd95PJh" arrow="true" cta="Click here"></Card>
+
+<RequestExample>
+
+```bash Request
+curl -X GET "https://sisx.thesqd.com/progress-bar-redirect"
+```
+
+</RequestExample>
+
+## Workflow Overview
+This workflow is triggered by an inbound GET request to the webhook URL "/progress-bar-redirect". It responds with a static HTML page that automatically redirects the user to the Squad queue URL. It also provides a clickable button for manual redirection, ensuring user experience continuity.
+
+---
+
+## Webhook Node
+**Function:**  
+Acts as the trigger that listens for GET requests on the specified path.  
+Parameters:  
+- `path`: `"progress-bar-redirect"`  
+- `responseMode`: `"responseNode"` (means the response is generated within the node)  
+- `options`: `{}` (default options, no additional configuration)  
+
+**Position:**  
+`[-180, 0]`
+
+---
+
+## Respond to Webhook Node
+**Function:**  
+Sends an HTML response back to the web client which performs an immediate redirect via a `<meta>` tag and provides a manual fallback button.  
+
+**Parameters:**  
+- `respondWith`: `"text"` (sending HTML as text)  
+- `responseBody`:  
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Redirecting to Squad</title>
+    <meta http-equiv="refresh" content="0; url=https://queue.thesqd.com/?account=1514" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+    <style>
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background-color: #1a1d21;
+            color: #e8e8e8;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            padding: 20px;
+            text-align: center;
+        }
+        .container {
+            background-color: #222529;
+            border-radius: 8px;
+            padding: 2rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            max-width: 400px;
+            width: 100%;
+        }
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+        }
+        p {
+            color: #a7a7a7;
+            margin-bottom: 1.5rem;
+            line-height: 1.5;
+        }
+        .button {
+            display: inline-block;
+            background-color: #5865f2;
+            color: #fff;
+            text-decoration: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 4px;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+        .button:hover {
+            background-color: #4752c4;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Redirecting to Squad</h1>
+        <p>If you are not automatically redirected, please click the button below:</p>
+        <a href="#" class="button" onclick="window.open('https://queue.thesqd.com/?account=1514', '', 'width=1000,height=800,noopener,noreferrer'); return false;">Open Squad Queue</a>
+    </div>
+</body>
+</html>
+```
+
+**Position:**  
+`[40, 0]`  
+
+---
+
+## Summary
+This "Progress Bar Redirector" process captures GET requests to a specific URL, responds with a styled HTML page containing an auto-redirect and a manual button, ensuring users are guided to the Squad queue seamlessly, with fallback options for manual navigation.
+
+---
+
+**Note:**  
+All components work together to deliver a seamless redirect experience via an HTML response embedded directly in the webhook response node, triggered by public GET requests to "/progress-bar-redirect".
