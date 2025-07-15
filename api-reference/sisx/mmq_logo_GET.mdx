@@ -1,0 +1,196 @@
+---
+title: "MMQ (Webhook4 - GET)"
+description: "The MMQ workflow is triggered by an HTTP GET request to fetch a logo image through a webhook, then processes related task and account data, builds responses, and interacts with Postgres and external services. It facilitates logo retrieval while managing task states and account validation."
+api: "GET /logo"
+---
+
+## Workflow Overview
+
+This workflow is triggered by an incoming GET request to the `/logo` endpoint via the "Webhook4" node. It processes the request to fetch logo image data, checks account task capacity, and orchestrates interactions with Postgres and other integrated systems. The main goal is to retrieve the logo image while managing task statuses, account limits, and related data updates.
+
+---
+
+## Request Example
+
+<RequestExample>
+
+```bash Request
+curl --request GET \
+  --url https://sisx.thesqd.com/webhook/logo
+```
+
+</RequestExample>
+
+---
+
+## Node: Webhook4
+* Acts as the trigger node that listens for GET requests at the `/logo` path.
+* Parameters:
+  - path: "logo"
+  - responseMode: "responseNode" (response handled by response node in workflow)
+  - options: {} (no additional options)
+
+---
+
+## Node: Sticky Note (Logo)
+* Purely for documentation or visual cues.
+* Content: "# Logo"
+* Positioning: Top-left (0,0), size 1000x320
+* Color: Default
+
+---
+
+## Node: Convert to File
+* Converts base64 encoded logo data into a binary file suitable for response.
+* Parameters:
+  - operation: "toBinary"
+  - sourceProperty: "base64" (assuming earlier steps set this property with image data)
+
+---
+
+## Node: Respond to Webhook8
+* Sends the binary image data back as a response to the GET request.
+* Parameters:
+  - respondWith: "binary"
+  - options: {} (use default options)
+
+---
+
+## Node: Postgres (Check if account has room)
+* Queries account-specific task capacity info.
+* Parameters:
+  - query: `"SELECT * FROM get_account_task_stats({{ $json.query.account }}) JOIN accounts a ON a.account = {{ $json.query.account }}"` (Check account task quota)
+  - operation: "executeQuery"
+  - options: {}
+  - credentials: "SquadData - N. Cal Replica"
+* Always outputs data for further decision making.
+
+---
+
+## Node: Switch2
+* Determines action based on account capacity data.
+* Conditions:
+  - Checks if account has available room or if tasks are queued.
+  - Routes flows accordingly:
+    - If account is at capacity, possibly trigger handling for limit.
+    - Else, proceed with logo fetch or further processing.
+
+---
+
+## Node: Postgres5
+* Retrieves tasks associated with the account for further validation.
+* Parameters:
+  - query: `"WITH ... (complex task status and history query)"`
+  - operation: "executeQuery"
+  - credentials: "SquadData - N. Cal Replica"
+
+---
+
+## Node: Get Account1
+* Retrieves account data, particularly account and capacity info.
+* Parameters:
+  - query: `"SELECT * FROM public.clickup_accounts WHERE account = '{{ $json.query.account }}'"`
+
+---
+
+## Node: Webhook3
+* Handles external trigger, possibly for refresh or update tasks (e.g., starting logo retrieval workflows).
+
+---
+
+## Node: Respond to Webhook5
+* Sends acknowledgment or data response back to the requester.
+* Parameters:
+  - respondWith: "json"
+  - responseBody: `{"logo_url": "Full logo image URL or binary data"}`
+
+---
+
+## Node: Switch4
+* Decides whether to proceed with logo image processing or handle errors/capacity limits.
+* Condition example:
+  - If logo image data exists, send it back.
+  - Else, respond with an error message.
+
+---
+
+## Node: Postgres7
+* Logs or updates task system with new statuses or task completion info.
+* Parameters:
+  - query: Complex update statements for task status and related history logs.
+
+---
+
+## Node: Postgres12
+* Retrieves additional task or account info, such as current task count or detailed history.
+* Parameters:
+  - query: `"SELECT * FROM public.task_history WHERE account = {{ $json.account }}"`
+
+---
+
+## Node: Postgres6
+* Refreshes materialized views, e.g., `active_projects_mv`, to ensure latest data.
+
+---
+
+## Node: Webhook (Higher-level trigger)
+* Triggers processes for related tasks or external integrations based on the logo request.
+
+---
+
+## Node: Postgres11
+* Logs change with status history or updates task-related data.
+
+---
+
+## Node: Postgres13
+* Updates supply chain or task queue records related to logo fetch and logo usage.
+
+---
+
+## Node: Postgres14
+* Additional task and history management, especially related to logo processing status updates.
+
+---
+
+## Node: POST /markup-created (Implicit in data)
+* Updates the system to mark the logo creation or retrieval as completed.
+* Parameters:
+  - body: Data payload indicating success, URL, or image binary as response
+
+---
+
+## Execution Data (Sample)
+
+```json
+{
+  "If": [
+    {
+      "json": {
+        "name": "All About Missions - Tri-Fold - 85x11",
+        "tags": ["brochure"],
+        "active": true,
+        "status": "on hold",
+        "task_id": "86dwdt7p2",
+        "assigned": true,
+        "aa_status": "complete",
+        "queue_num": null,
+        "submitter": "Lauren Kytka",
+        "changed_at": "2025-06-02T20:24:42.330Z",
+        "row_created": "2025-04-02T19:18:52.127Z",
+        "status_active": false,
+        "latest_due_date": "2025-04-09T00:00:00.000Z",
+        "resp_department": "Design Squad",
+        "status_pill_color": "#656f7d",
+        "total_time_tracked": 154.34,
+        "assignee_departments": ["Design Squad"],
+        "submitted_date_friendly": "Apr. 02, 2025"
+      }
+    },
+    // Additional task entries...
+  ],
+  // More execution data for other nodes...
+}
+```
+
+This detailed documentation ensures full clarity on each node, its purpose, parameters, and how it interacts within the entire workflow.
