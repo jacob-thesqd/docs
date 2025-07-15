@@ -1,0 +1,203 @@
+---  
+title: "MMQ (Webhook - PATCH)"  
+description: "This API endpoint is triggered by PATCH requests via a webhook at the path /mmq. The workflow processes task updates, checks account capacity, interacts with ClickUp to update task statuses, and manages various database entries to handle queueing, task assignment, and status management."  
+api: "PATCH /mmq"  
+---
+
+## Workflow Overview
+
+This API trigger initiates a complex workflow that manages task updates through a webhook. Upon receiving a PATCH request, it begins by invoking database queries, conditional logic, and integrating with external services like ClickUp to update task statuses and manage queue positions, capacities, and assignments. It also handles updating the database state, managing task lifecycle states such as "on hold", "playing", or "paused", and responds accordingly to the incoming webhook request.
+
+---
+
+## Request Example
+
+```bash Request
+curl --request PATCH \
+  --url https://yourapi.domain/mmq \
+  --header "Content-Type: application/json" \
+  --data '{
+    "id": "task_id_here",
+    "action": "pause"
+  }'
+```
+
+---
+
+## Nodes in the Workflow
+
+### Webhook (Trigger)
+
+This node captures PATCH requests at /mmq, enabling the workflow to respond to task update triggers.  
+**Parameters:**  
+- Path: `"mmq"`  
+- Methods Allowed: `"GET"`, `"PATCH"`  
+- Response Mode: `"responseNode"`  
+- Multiple Methods: `true`  
+
+### Sticky Note (Visual Marker)
+
+A visual marker indicating the section of the workflow labeled `# Logo` for documentation or design purposes.  
+
+### Postgres5 - Check Account Capacity
+
+This node runs a SQL query to fetch current account task stats such as capacity, active tasks, and address details for the given account ID extracted from the query parameter.  
+**Query:**  
+```sql
+SELECT * FROM get_account_task_stats({{ $json.query.id }})
+JOIN accounts a ON a.account = {{ $json.query.id }}
+```  
+**Credentials:** SquadData - N. Cal Replica  
+
+### Switch2 - Conditional Routing
+
+Based on the presence of specific query parameters (`id` and `account`), this switch determines the subsequent route: either process by account or by task ID.  
+**Rules:**  
+- If `id` exists and `account` doesn't, route to `Get Account1`.  
+- If `account` exists and `id` doesn't, route to `Check if account has room`.
+
+### Get Account1 - Retrieve Account Info
+
+Fetches account specifics such as active tasks, capacity, church info, and related data for the specific account ID.  
+**Query:**  
+```sql
+SELECT * FROM get_account_task_stats({{ $json.query.id }})
+```  
+**Credentials:** SquadData – N. Cal Replica  
+
+### Respond to Webhook (Immediate Response)
+
+Returns a JSON response indicating whether tasks were found or not, likely used as an immediate acknowledgment to the webhook caller.  
+**Response Body:**  
+```json
+{
+  "tasks_found": false
+}
+```  
+
+### Postgres12 - Load Active Tasks
+
+Loads tasks associated with the account, including task details, status, tags, assignee info, due dates, and other task attributes.  
+**Query:**  
+```sql
+SELECT cap, tasks FROM get_active_tasks({{ $json.account }})
+```  
+**Credentials:** SquadData – N. Cal Replica  
+  
+### Check if Account Has Room
+
+Runs a check to see if the account can accommodate more tasks, returning capacity, address, and other organizational data.  
+**Query:**  
+```sql
+SELECT * FROM get_account_task_stats({{ $json.query.id }})
+JOIN accounts a ON a.account = {{ $json.query.id }}
+```  
+**Credentials:** SquadData – N. Cal Replica  
+
+### Switch4 - Route for Play/Pause Actions
+
+Routes based on the `action` parameter from the incoming request.  
+- If `pause`, route to `Edit Fields9`.  
+- If `play`, route to further task updates and status changes.
+
+### Edit Fields9 - Mark Task as On Hold
+
+Updates the task's status to "on hold" in external systems (e.g., ClickUp).  
+**Set Fields:**  
+- status: `"on hold"`  
+
+### Postgres13 - Log Queue Change
+
+Updates the queue position for tasks, possibly reordering tasks or updating queue numbers, with data about the action taken.  
+**Query:**  
+```sql
+UPDATE mmq_log SET data = {{ $json.toJsonString() }}, action = 'reorder_queue', account = {{ $('Postgres2').first().json.account }}
+```  
+**Credentials:** SquadData  
+
+### Webhook for Play Action
+
+This node handles direct webhooks for updating tasks' play actions.  
+
+### ClickUp - Update Task Status to On Hold (Play/Pause)
+
+Updates a specific task's status to `"on hold"` in ClickUp, based on task ID provided in the message payload.
+
+### Switch5 - Route for Play or Pause
+
+Decides whether to commence ("play") or pause ("pause") based on `body.action` parameter.  
+- `pause` output routes to `Edit Fields9` for task status update.  
+- `play` routes to task queue management and assignment.
+
+### Edit Fields11 - Update Task Details for Play Action
+
+Sets task-specific details such as task ID, status ("active"), and due date in preparation for the task to "play" (activate).  
+
+### Merge1 - Combine Task Data
+
+Merges the updated task info for further processing, maintaining data integrity across steps.
+
+### Aggregate - Collect Task List Data
+
+Aggregates task data to process all relevant tasks for the account, used for batch operations and analysis.  
+
+### Sticky Note (Visual Marker)
+
+Provides documentation with content: `# App Data`.
+
+### Webhook3 & Webhook4 - Additional Webhook Responses
+
+Responds on different endpoints for subsequent webhook triggers, handling further task status updates and queue management.
+
+### Edit Fields12 & Edit Fields13 - Final Task Updates
+
+Finalize updating task status back in systems like ClickUp, resetting statuses, due dates, etc., based on previous actions.
+
+### Postgres16 - Refresh Materialized View
+
+Refreshes the `active_projects_mv` for maintaining up-to-date task and project states in the database.
+
+### Postgres17 - Load Detailed Task State
+
+Loads detailed statuses, including tags, assignee info, due dates, and history, for detailed task state management.
+
+---
+
+## Execution Data Snippets
+
+Below are sample execution data responses when the workflow runs successfully, reflecting task states, account info, and related attributes for testing or debugging purposes.
+
+```json
+{
+  "If": [
+    {
+      "json": {
+        "name": "All About Missions - Tri-Fold - 85x11",
+        "tags": ["brochure"],
+        "active": true,
+        "status": "on hold",
+        "task_id": "86dwdt7p2",
+        "submitted_date_friendly": "Apr. 02, 2025",
+        // further attributes...
+      }
+    },
+    {
+      "json": {
+        "name": "Todo Sobre All Saints Clase de Membresia",
+        "tags": ["churchevent"],
+        "status": "deliverables needed",
+        "task_id": "86dx50emg",
+        "submitted_date_friendly": "Jun. 30, 2025",
+        // further attributes...
+      }
+    }
+    // ...more task objects
+  ]
+}
+```
+
+*(Note: The above is a simplified snippet for illustration, real response includes full task attributes.)*
+
+---
+
+This document covers every aspect of the API trigger and associated workflow nodes, detailing their purpose, parameters, and integration points to facilitate comprehensive understanding and potential automation or debugging tasks.
