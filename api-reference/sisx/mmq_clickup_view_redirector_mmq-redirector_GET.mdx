@@ -1,0 +1,147 @@
+---
+title: "MMQ Clickup View Redirector (Webhook - GET)"
+description: "This webhook trigger workflow listens for GET requests at /mmq-redirector, checks for specific project view data in Postgres, and responds with redirection or an error message based on the data's presence."
+api: "GET /mmq-redirector"
+---
+
+<Card title="MMQ Clickup View Redirector" icon="link" href="https://sisx.thesqd.com/workflow/xw4T4Sg7WNw2xq4r" arrow="true" cta="Click here"></Card>
+
+<RequestExample>
+
+```bash Request
+curl --request GET \
+  --url https://sisx.thesqd.com/mmq-redirector
+```
+
+</RequestExample>
+
+## Trigger: Webhook
+The workflow begins with a GET webhook at the path `/mmq-redirector`. It awaits incoming GET requests, capturing headers, query parameters, and other request data to initiate the process.
+
+- **Parameters:**
+  - `path`: "mmq-redirector" (Path the webhook listens on)
+  - `responseMode`: "responseNode" (Handlers respond using subsequent nodes)
+
+---
+
+## Node: Postgres
+Queries the `clickup_views` table to verify if a specific project view exists, using the referer header to identify the project.
+
+- **Operation**: `select`
+- **Table**: `"public"."clickup_views"`
+- **Where condition**:
+  - `id` equals the last segment of the referer URL (`$json.headers.referer.split('/').last()`)
+- **Parameters**:
+  - `onError`: `"continueRegularOutput"` (Continue workflow if error occurs)
+  - `returnAll`: `true` (Returns all matching rows)
+- **Credentials**: `SquadData`
+
+---
+
+## Node: If
+Checks whether the Postgres query returned data, i.e., whether the project view exists.
+
+- **Conditions**:
+  - Existence of `$json.id` (from the Postgres node)
+- **Logical Operator**: `AND`
+
+---
+
+## Node: Respond to Webhook (Fail response)
+If the project view data does not exist, responds with an HTML error page informing users that the project queue could not be loaded.
+
+- **Response**:
+  - Body: An HTML page indicating that the project queue could not be loaded, with a message: "Oops! We were unable to load your project queue but rest assured our team has been notified and we will look into this as soon as possible."
+  - `respondWith`: `"text"`
+
+---
+
+## Node: Postgres1
+Retrieves details from the `clickup_lists` table, matching the ID obtained from the previously fetched data (`$json.list`).
+
+- **Operation**: `select`
+- **Table**: `"public"."clickup_lists"`
+- **Where**:
+  - `id` equals `$json.list`
+- **Parameters**:
+  - `onError`: `"continueErrorOutput"` (Continue workflow on error)
+  - `limit`: `1`
+  - `alwaysOutputData`: true
+- **Credentials**: `SquadData`
+
+---
+
+## Node: Switch
+Determines if the list data fetched from Postgres exists, indicating whether to proceed with a redirect or an alternative response.
+
+- **Conditions**:
+  - `$json.list` exists
+  - `$json.folder` exists
+
+---
+
+## Node: Postgres2
+Fetches folder data from `clickup_folders` based on `$json.folder`.
+
+- **Operation**: `select`
+- **Table**: `"public"."clickup_folders"`
+- **Where**:
+  - `id` equals `$json.folder`
+- **Parameters**:
+  - `onError`: `"continueErrorOutput"` (Workflow continues on error)
+  - `limit`: 1
+  - `alwaysOutputData`: true
+- **Credentials**: `SquadData`
+
+---
+
+## Node: Respond to Webhook (Success - Redirect)
+If the data exists, directs the user to the URL with the account parameter, effectively redirecting to the project queue.
+
+- **Response**:
+  - `respondWith`: `"redirect"`
+  - `redirectURL`: `"=https://queue.thesqd.com/?account={{ $json.account }}"`
+
+---
+
+## Node: If1
+Checks whether the `id` exists in the list data, used to decide success or failure responses.
+
+- **Conditions**:
+  - Existence of `$json.id`
+
+---
+
+## Node: Respond to Webhook (Success - HTML)
+If the `id` exists, responds with a standard HTML page informing the user that the queue loads successfully (not explicitly detailed in the provided data but implied as success).
+
+- **Response**:
+  - `respondWith`: `"text"`
+  - `responseBody`: Basic HTML indicating success or loading message (not explicitly provided but generally would be a success page).
+
+---
+
+## Node: If2
+Similar to `If1`, checks fallback to ensure data is available for other operations (such as Slack notification).
+
+- **Conditions**:
+  - `$json.id` exists
+
+---
+
+## Node: Slack Notification
+If the project view or list is inaccessible, this node sends a notification message to a designated Slack channel, alerting the team about the inaccessible view.
+
+- **Message**:
+  - "The MMQ view was inaccessible at this link: {{ $('Webhook').item.json.headers.referer }}. Please fix asap!"
+- **Channel**:
+  - `C05DJJF8QTU`
+- **Bot Profile options**:
+  - Profile photo and name: "Vicky the View Notifier"
+
+---
+
+## Summary:
+This workflow listens for incoming GET requests on `/mmq-redirector`. It verifies if a specific project view exists in Postgres, then accordingly redirects the user to a project queue URL if data is found. If data is missing, it responds with an HTML error page and sends an alert to Slack. The entire process ensures users are either seamlessly redirected or properly notified of issues, with proper team alerts for missing data.
+
+---
