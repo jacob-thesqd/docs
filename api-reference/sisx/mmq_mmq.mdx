@@ -1,21 +1,15 @@
 ---
-title: "MMQ (Webhook - GET)"
-description: "This API endpoint handles incoming GET requests via a webhook for the MMQ system. It initiates a process that checks account capacity, retrieves task-specific data from Postgres, and responds accordingly, enabling real-time interactions for task management and updates."
-api: "GET /mmq"
----
-
-## Workflow Overview
-
-This workflow is triggered by an incoming HTTP GET request to the `/mmq` webhook endpoint. It checks if an account has room for additional tasks, retrieves relevant task and account data from Postgres, processes and updates task statuses, and responds with appropriate data, facilitating real-time task management and updates within the MMQ system.
-
+title: "MMQ (Webhook - PATCH)"
+description: "This workflow handles incoming PATCH requests via a webhook endpoint /mmq, performs database queries to process account and task data, interacts with ClickUp to update task statuses, manages task states (such as play, pause), and maintains event logs. It orchestrates real-time task updates and status management for a queue system."
+api: "PATCH /mmq"
 ---
 
 ## Request Example
 
 <RequestExample>
 
-```bash
-curl --request GET \
+```bash Request
+curl --request POST \
   --url https://sisx.thesqd.com/webhook/mmq
 ```
 
@@ -23,184 +17,214 @@ curl --request GET \
 
 ---
 
+## Workflow Overview
+
+This workflow is triggered by PATCH requests to the `/mmq` endpoint, which is configured as a webhook. It performs a series of database lookups and updates, manages task statuses, and interacts with ClickUp to reflect task state changes such as play or pause. The workflow also handles real-time event logging, ensures task limits are adhered to, and responds with status information about the request processing. It incorporates multiple conditional branching to handle different task actions defined by incoming webhook payloads.
+
+---
+
 ## Nodes
 
-### Webhook
-The webhook node that triggers the workflow on GET or PATCH requests to `/mmq`. It listens for incoming requests and initiates the process.
+### Webhook (n8n-nodes-base.webhook)
+This is the initial trigger node that listens for PATCH requests on the `/mmq` endpoint.
 
-- **Parameters:**
-  - `path`: "mmq"
-  - `httpMethod`: ["GET", "PATCH"]
-  - `responseMode`: "responseNode"
-  - `multipleMethods`: true
-- **Function:** Waits for incoming GET/ PATCH requests on `/mmq` and passes the data downstream.
-
----
-
-### Switch2
-Splits the flow based on the presence of `query.id` and `query.account` parameters.
-
-- **Rules:**
-  - If `query.id` exists and `query.account` does not, proceed with one branch.
-  - If `query.account` exists and `query.id` does not, proceed with another branch.
-- **Function:** Conditional routing based on provided query parameters.
+- Path: `mmq`
+- Options: `{}` (no additional options)
+- Response Mode: `responseNode`
+- Multiple Methods Allowed: `true` (accepts GET, PATCH)
+- Response Mode: Sends output to the response node for further processing
 
 ---
 
-### Get Account1
-Sets the account number from the query parameter for downstream use.
-
-- **Parameters:**
-  - `value`: `{{ $json.query.account }}`
-- **Function:** Extracts account ID from the query string for use in subsequent database queries.
+### Sticky Note (n8n-nodes-base.stickyNote)
+Provides a visual marker with the label `# Logo` indicating section content related to logo or branding visuals; no direct data processing.
 
 ---
 
-### Postgres: Check if account has room
-Queries the account details and current task load to assess if new tasks can be added.
+### Postgres (n8n-nodes-base.postgres - Postgres5)
+Performs a query on the `clickup_folders`, `clickup_lists`, and `tasks` tables to retrieve folder and list info for a given task ID.
 
-- **Parameters:**
-  - Query: `SELECT * FROM get_account_task_stats({{ $json.account }}) JOIN accounts a ON a.account = {{ $json.account }}`
-- **Function:** Checks current usage, capacity, and other related account info. Continues regardless of capacity status.
-
----
-
-### Switch4
-Routes based on the account's capacity/status information for the subsequent task handling.
-
-- **Function:** Determines whether to proceed with task processing based on account capacity.
-
----
-
-### Edit Fields12
-Prepares task data for updating, assigns task-related info, including status and due date.
-
-- **Parameters:**
-  - Sets `task_id`, `status`, `active`, and `due_date` from previous data.
+- Query:
+  ```sql
+  SELECT
+  cf.name,
+  cf.account
+  FROM public.clickup_folders cf
+  JOIN public.clickup_lists cl on cl.folder = cf.id
+  JOIN public.tasks t ON t.list_id = cl.id
+  WHERE t.task_id = '{{ $json.query.id }}'
+  ```
+- Credentials: `SquadData - N. Cal Replica`
+- Operation: `executeQuery`
 
 ---
 
-### Postgres13
-Updates task information including status, due date, and activity state.
+### Switch (Switch2)
+Branches execution based on conditions involving the presence of a task `id` and `account` parameter in the query.
 
-- **Parameters:**
-  - Query: `UPDATE public.tasks SET ... WHERE task_id = {{ $json.task_id }}`
-- **Function:** Updates task status, activity, and due date in the database.
-
----
-
-### Webhook (play/pause)
-Receives PATCH requests for play/pause actions related to tasks.
-
-- **Parameters:**
-  - `path`: "play-pause"
-  - `httpMethod`: "PATCH"
-  - Responds with a simple JSON indicating acknowledgment.
+- Rules:
+  - If `query.id` exists and `query.account` does not, follow the first branch.
+  - If `query.id` does not exist and `query.account` exists, follow the second branch.
+- Fallback output: `extra`
 
 ---
 
-### Switch5
-Routes actions based on the `action` value, e.g., "pause" or "play".
+### Get Account1 (n8n-nodes-base.set)
+Assigns the account number from the query parameters to the output data.
 
-- **Function:** Determines whether to pause or play a task based on action keyword.
-
----
-
-### Edit Fields9
-Sets fields for pausing tasks: task ID, status as "on hold", and active flag.
-
-- **Parameters:**
-  - Assigns `task_id`, `status`, and `active` from incoming request data.
+- Assign: `account = {{ $json.query.account }}`
 
 ---
 
-### ClickUp
-Updates the task status on ClickUp to "on hold" (pause operation).
+### Respond to Webhook (n8n-nodes-base.respondToWebhook)
+Returns a 400 response with a message about conflicting parameters if both account and task ID are supplied at the same time.
 
-- **Parameters:**
-  - `id`: `{{ $json.task_id }}`
-  - `operation`: "update"
-  - `updateFields`: `{"status":"on hold"}`
-
-- **Credentials:**
-  - `clickUpApi`: "TheSquad"
+- Response Code: 400
+- Response Body: `"Only one of account or task ID params can be supplied at a time."`
 
 ---
 
-### Postgres15
-Logs the pause action into the database, capturing task ID, account, and data.
-
-- **Query:** `INSERT INTO public.mmq_log (data, action, account) VALUES (...)`
+### Webhook (n8n-nodes-base.webhook)
+Secondary webhook for `/play-pause` POST requests, configured to handle PATCH methods.
 
 ---
 
-### Respond to Webhook2
-Responds with a simple confirmation of the pause operation execution.
+### ClickUp (n8n-nodes-base.clickUp)
+Updates specific task fields in ClickUp, e.g., setting status to `on hold` based on the task ID.
 
-- **Response Body:** "{}"
-
----
-
-### Merge1
-Combines data streams from previous steps, preparing for further processing or final response.
+- Operation: `update`
+- Update Fields: `status: "on hold"`
+- Credentials: `TheSquad API`
 
 ---
 
-### Webhook3
-Handles incoming POST requests to trigger resume or other task actions.
+### Switch (Switch4)
+Branches the flow based on `action` (`pause` or `play`) from the payload.
 
-- **Parameters:**
-  - `path`: "logo"
-  - `httpMethod`: "PATCH"
-
----
-
-### Postgres16
-Executes a SQL command to refresh materialized views related to active projects.
-
-- **Query:** `REFRESH MATERIALIZED VIEW active_projects_mv;`
+- Rules:
+  - If `action` equals `"pause"`, output to `pause`.
+  - If `action` equals `"play"`, output to `play`.
 
 ---
 
-### Webhook4
-Receives requests for resume or other task actions and continues the flow.
+### Edit Fields (n8n-nodes-base.set - Edit Fields9)
+Sets parameters for task update, including task ID, `status` as `"on hold"`, and `active: false`.
+
+- Assignments:
+  - `task_id = {{ $json.id }}`
+  - `status = "on hold"`
+  - `active = false`
 
 ---
 
-### ClickUp4
-Reverts task status back to previous state (e.g., "active").
+### Postgres (Postgres7)
+Retrieves the latest status of a task from `status_history` table.
 
-- **Parameters:**
-  - `id`: `{{ $json.task_id }}`
-  - `operation`: "update"
-  - `updateFields`: `{"status":"active"}`
-
-- **Credentials:**
-  - `clickUpApi`: "TheSquad"
-
----
-
-### Postgres17
-Runs a complex SQL query to gather detailed task info, update statuses, deadlines, and record history, then logs or updates accordingly.
+- Query:
+  ```sql
+  WITH latest_status AS (
+      SELECT DISTINCT ON (task_id) task_id, status_after, changed_at
+      FROM public.status_history
+      ORDER BY task_id, changed_at DESC
+  )
+  SELECT * FROM latest_status WHERE task_id = '{{ $json.task_id }}'
+  ```
 
 ---
 
-### Webhook6
-Upon task status change, updates the system and sends back a JSON response indicating success.
+### Edit Fields (Edit Fields12)
+Sets task fields for `on hold` state in further processing, including due date.
+
+- Assignments:
+  - `task_id = {{ $json.id }}`
+  - `status = {{ $json.status_before }}`
+  - `active = true`
+  - `due_date = {{ $json.due_date.toDateTime('ms').format('yyyy-MM-dd') }}`
 
 ---
 
-### Additional Nodes
-Further nodes manage additional data processing, updating logs, handling different task states, and final responses, as the process continues navigation through the system.
+### Webhook (Respond to Webhook)
+Responds with a JSON indicating no tasks found (`"tasks_found": false`) for certain conditions.
 
 ---
 
-## Execution Data (Sample Post-Execution Responses)
-
-- Contains the latest state of each node after execution.
-- Includes mock data from the system, representing task details, account info, timestamps, and activity status.
-- Example: For the `Check if account has room` node, it confirms current usage, capacity, and additional info like church details, contact info, and task statuses.
+### Merge (Merge10)
+Combines data streams using position-based merging for other conditional flows.
 
 ---
 
-*This document serves as a comprehensive guide to the `/mmq` GET endpoint, detailing each node's function, parameters, and flow logic for full understanding of the webhook system's operations.*
+### Conditional Branch: If2
+Checks if a task ID exists for further specialized processing.
+
+---
+
+### ClickUp (ClickUp4)
+Restores previous task status in ClickUp using the prior status information.
+
+- Operation: `update`
+- Fields:
+  - `status: {{ $json.status_before }}`
+
+---
+
+### Postgres (Postgres18)
+Inserts or updates data in `mmq_log` to log the play action, associating with folder A number.
+
+- Data:
+  ```json
+  {
+    "input": "{{ $('Switch5').item.json.body.toJsonString() }}",
+    "clickup": {{ $('Merge9').item.json.toJsonString() }}
+  }
+  ```
+- Operation: `executeQuery`
+- Query:
+  ```sql
+  INSERT INTO mmq_log (data, action, account)
+  VALUES (
+    {{ $json.data }},
+    "play",
+    {{ $json.folder.name.match(/\\d+/)[0] > 0 ? $json.folder.name.match(/\\d+/)[0] : ($json.list.name.match(/\\d+/)[0] > 0 ? $json.list.name.match(/\\d+/)[0] : null) }}
+  )
+  ```
+
+---
+
+### Webhook (Respond to Webhook)
+Confirms processing status for either paused or played task actions.
+
+---
+
+### Postgres (Postgres14)
+Creates or updates a activity log to log task changes happening in the system, referencing related data such as task, account, and the latest event.
+
+- Query:
+  (Complex WITH statements involving status, due date, assignee, and tags to determine current task state and assign updates accordingly.)
+
+---
+
+### Merge (Merge9)
+Merges multiple data streams related to task updates to analyze combined information.
+
+---
+
+### Conditional: If
+Checks for presence of `due_date_after` to determine next steps such as setting task aside or process continuation.
+
+---
+
+### ClickUp (ClickUp4)
+Restores task status in ClickUp, setting it back from `on hold`.
+
+---
+
+### Postgres (Postgres18)
+Logs the play action in `mmq_log` with associated details, similar as above but for pause actions.
+
+---
+
+## Summary
+
+This workflow provides a robust real-time task management system triggered by PATCH webhooks at `/mmq`. It performs key database lookups related to task statuses, handling the queuing system logic, such as marking tasks on hold or resuming play. It updates necessary task data in ClickUp, logs activity, and manages task limits based on account capacity. Conditional branching and real-time webhooks allow for flexible task state control, making this system suited for queue-driven task workflows with shared resource management.
+
+---
