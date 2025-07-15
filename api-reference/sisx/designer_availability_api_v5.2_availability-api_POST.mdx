@@ -1,0 +1,113 @@
+---
+title: "Designer Availability API v5.2 (Webhook - POST)"
+description: "This workflow listens for POST requests on the /availability-api endpoint, processes incoming availability data, filters and prioritizes designer options based on defined rules, and logs the decision details into a Postgres database."
+api: "POST /availability-api"
+---
+
+<Card title="Designer Availability API v5.2" icon="link" href="https://sisx.thesqd.com/workflow/LMWH3l3IaJmoIyRQ" arrow="true" cta="Click here"></Card>
+
+<RequestExample>
+
+```bash Request
+curl --request POST \
+  --url https://sisx.thesqd.com/webhook/availability-api \
+  --header "Content-Type: application/json" \
+  --data '{
+    "body": {
+      "pushed": false,
+      "taskId": "86dx2j86n",
+      "resp_dept": "Design Squad",
+      "high_usage": false,
+      "accountLink": "2686",
+      "projectName": "Rock N Ribs Invite Card",
+      "project_type": "LayoutSM",
+      "time_estimate": 30,
+      "max_days_future": 15,
+      "min_days_future": 3
+    }
+  }'
+```
+
+</RequestExample>
+
+---
+
+## Trigger: Webhook Node "Webhook"
+- Listens for POST requests at the path `availability-api`, with response mode set to respond through a response node.
+
+## 1. Edit Fields: "Edit Fields1"
+- Sets fields with raw JSON output `$json.body`, allowing access to incoming data for subsequent nodes.
+
+## 2. Limit: "First 2 Days Out"
+- Limits the input items to the first N designers with the earliest availability if multiple options are provided.
+- `maxItems` is dynamically calculated based on the index of the designer out in more than 2 days: 
+```plaintext
+maxItems = {{$input.all().indexOf($input.all().find(i=>i.json.days_out > $input.all().find(i=>i.json.days_out >  $input.first().json.days_out).json.days_out))}}
+```
+
+## 3. Respond Nodes: "Previous", "Top", "Preference >= 2"
+- These nodes immediately respond based on different conditions:
+  - **Previous:** Responds if the previous desiger was a prior designer (`prev_des == 1`) and high_usage is false.
+  - **Top:** Responds with the top result.
+  - **Preference >= 2:** Responds if the designer preference score is >= 2 and high_usage is false.
+
+## 4. Switch: "Switch"
+- Routes the flow into different cases:
+  - **prev:** If the previous designer was a prior designer and not high usage.
+  - **preference:** If preference score >= 2 and not high usage.
+  - **fallback ("extra"):** If none of the above conditions are met.
+
+## 5. Execution Data: "Execution Data"
+- Saves the `taskId` from the webhook body into execution data for later reference.
+
+## 6. Merge Nodes: "Merge2", "Merge3"
+- Merge multiple data streams for cohesive processing:
+  - **Merge2:** Combines previous, preference, or top responses.
+  - **Merge3:** Combines the data for further processing with the code node.
+
+## 7. Set: "Edit Fields" (Post-processing)
+- Sets detailed info for the assigned designer, including:
+  - `task_id` from webhook.
+  - `account` and `designer` details obtained from prior nodes.
+  - All options (`all_choices`).
+  - `designer_data` for context.
+  - `explanation_pl` and `explanation_pl_md` containing formatted messages explaining the assignment, generated via JavaScript.
+
+## 8. Code: "Code"
+- Runs JavaScript to generate a detailed message explaining why the designer was selected, considering preference score, previous designer status, available minutes, and earliest availability.
+- Returns `message` and `message_md`.
+
+## 9. Final Merge: "Merge3"
+- Combines the generated message with other data for logging.
+
+## 10. Postgres: "Postgres1"
+- Logs the decision into the `aa_decision_log` table.
+- Columns include `task_id`, `designer`, `all_choices`, `assignee_id`, `designer_data`, `explanation_pl`, `explanation_pl_md`, `execution_id`, among others.
+- Uses credentials with ID `E1ZzQqtaKFgPZ75x`.
+
+---
+
+## 11. Workflow Management Nodes
+- **Check Estimate is Correct:** Executes sub-workflow to verify task estimate.
+- **Blackouts:** Executes blackout period check for the designer.
+- **Get Availabilities:** Retrieves designers' availability data based on the task requirements.
+
+---
+
+## Pin Data: "Webhook" Payload
+- Contains the original incoming data, notably:
+```json
+{
+  "taskId": "86dx2j86n",
+  "resp_dept": "Design Squad",
+  "high_usage": false,
+  "accountLink": "2686",
+  "projectName": "Rock N Ribs Invite Card",
+  "project_type": "LayoutSM",
+  "time_estimate": 30,
+  "max_days_future": 15,
+  "min_days_future": 3
+}
+```
+
+This detailed structure shows the flow from receiving the webhook request, processing data, decision-making, and logging the outcome meticulously.
