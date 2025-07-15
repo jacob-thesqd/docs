@@ -1,399 +1,244 @@
-```markdown
 ---
 title: 'Watch All Tasks V3'
-description: 'This workflow automates the processing of ClickUp tasks, enriching them with data from Airtable and Dropbox, and updating records accordingly. It handles various scenarios, including creating project folders, managing go-live dates, and notifying teams via Slack for specific task tags.'
-api: "POST /enrich-record"
+description: 'This N8N workflow, named "Watch All Tasks V3", is designed to process tasks from ClickUp, enrich them with data from Airtable and Dropbox, and update records accordingly. It handles various scenarios, including archiving, checking for specific tags, and managing video-related tasks, ultimately updating Airtable and potentially triggering other automations or notifications.'
+api: "POST /enrich-record-manual"
 ---
 
 ## Workflow Details
 
-- **Workflow ID**: `TLHsRBUWw3klQKo3`
-- **Server**: sis2 (https://sis2.thesqd.com)
-- **Status**: Active
-- **Created**: November 26, 2024
-- **Last Updated**: June 10, 2025
+*   **Workflow ID**: `TLHsRBUWw3klQKo3`
+*   **Status**: Active
+*   **Tags**: Airtable
 
-## Webhook Endpoint
+## Webhook Endpoints
+
+### Trigger Webhook
 
 ```
-POST https://sisx.thesqd.com/webhook/enrich-record
+POST /enrich-record-manual
 ```
+
+This endpoint is triggered manually to initiate the workflow.
+
+### HookDeck Trigger Webhook
+
+```
+POST /enrich-record
+```
+
+This endpoint is triggered by HookDeck, likely for automated task creation events.
 
 ## Workflow Process
 
-The workflow is designed to be triggered by new task events and proceeds through a series of data enrichment, conditional logic, and update operations.
-
-### 1. HookDeck Trigger
-- **Purpose**: This node acts as the primary trigger for the workflow, receiving webhook events from HookDeck.
-- **Path**: `/enrich-record`
-- **Method**: POST
-
-### 2. Format1 (Set Node)
-- **Purpose**: This node formats incoming data from the webhook trigger, extracting `recId`, `taskId`, and `time_estimate`.
-- **Assignments**:
-  - `recId`: `={{ $json.body.recId}}`
-  - `taskId`: `={{$json.body.taskId}}`
-  - `time_estimate`: `={{ $json.body.time_estimate }}`
-
-### 3. Format2 (Set Node)
-- **Purpose**: This node formats incoming data from the webhook trigger, extracting `recId` and `taskId` from query parameters.
-- **Assignments**:
-  - `recId`: `={{ $json.query.recId }}`
-  - `taskId`: `={{ $json.query.taskId }}`
-
-### 4. Merge1 (Merge Node)
-- **Purpose**: This node combines data from the `Format1` and `Format2` nodes, prioritizing data from `Format1`.
-- **Mode**: Combine
-- **Clash Handling**: Prefer Input 1
-
-### 5. Check if Not Archived (If Node)
-- **Purpose**: This node checks if the `archived` field in the incoming data is false.
-- **Conditions**:
-  - `archived` is false
-
-### 6. Format (Set Node)
-- **Purpose**: This node formats the `recId` and `taskId` from the merged data for subsequent use.
-- **Assignments**:
-  - `recId`: `={{ $json.recId }}`
-  - `taskId`: `={{ $json.taskId }}`
-  - `time_estimate`: `={{ $json.time_estimate >=0 ? $json.time_estimate : null }}`
-
-### 7. Airtable (Airtable Node)
-- **Purpose**: Retrieves a record from Airtable based on the `recId`.
-- **Base**: NEW Live Task Tracking
-- **Table**: All Live Tasks
-- **Operation**: Read Record
-- **Record ID**: `={{ $json.recId }}`
-
-### 8. Get CU Task (ClickUp Node)
-- **Purpose**: Fetches details of a ClickUp task using the `taskId`.
-- **Operation**: Get Task
-- **Task ID**: `={{ $json.taskId }}`
-
-### 9. If (If Node)
-- **Purpose**: Checks if the `Go Live Date` field in the ClickUp task data is not empty.
-- **Conditions**:
-  - `Go Live Date` is not empty
-
-### 10. Update Airtable Record (Airtable Node)
-- **Purpose**: Updates an Airtable record with various fields from ClickUp, including `Go Live Date`.
-- **Base**: NEW Live Task Tracking
-- **Table**: All Live Tasks
-- **Operation**: Update Record
-- **Columns**:
-  - `id`: `={{ $('Format').first().json.recId }}`
-  - `TaskID`: `={{ $('Format').first().json.taskId }}`
-  - `Project Name`: `={{ $('Format2').isExecuted == true ? $json.name : null }}`
-  - `Task URL`: `={{ $json.url }}`
-  - `Draft Date`: `={{ $json.due_date?.toDateTime('ms').toISO() }}`
-  - `Date Closed`: `={{ $json.date_closed ? new Date(Number($json.date_closed)).toLocaleString() : null }}`
-  - `Account Link`: `={{ ... }}` (Complex logic to extract account link)
-  - `Go Live Date`: `={{$json.text_content ? JSON.stringify(((inputString) => {...})($json.text_content)).toDateTime().format('MM/dd/yyyy') : null}}`
-  - `Time Tracked`: `={{$json.time_spent ? Number($json.time_spent/60000) : 0}}`
-  - `N8N Execution ID`: `={{ $execution.id }}`
-  - `Dropbox Folder ID`: `={{ ... }}` (Logic to determine Dropbox Folder ID)
-  - `Responsible Department`: `={{ ... }}` (Logic to determine department)
-  - `Current Status In ClickUp`: `={{ $json.status.status }}`
-  - `Designer/Video Specialist`: `={{ ... }}` (Logic to get designer/video specialist)
-
-### 11. If1 (If Node)
-- **Purpose**: Checks if the length of the `go_live` field is greater than 2 and if a Dropbox Folder ID exists.
-- **Conditions**:
-  - Length of `go_live` > 2
-  - Dropbox Folder ID exists
-
-### 12. Edit Fields2 (Set Node)
-- **Purpose**: Extracts and formats the `Go Live Date` from the `text_content` of the ClickUp task.
-- **Assignments**:
-  - `go_live`: `={{JSON.stringify(((inputString) => {...})($json.text_content))}}`
-
-### 13. Stay w/ Branch 1 (Merge Node)
-- **Purpose**: Merges data, prioritizing the first input.
-
-### 14. If2 (If Node)
-- **Purpose**: Checks if a Dropbox Folder ID exists, either from the `Get DB Folder ID from ShareURL` or `Dropbox2` nodes.
-- **Conditions**:
-  - Dropbox Folder ID exists
-
-### 15. Edit Fields (Set Node)
-- **Purpose**: Prepares data for creating video folders, setting an `event` and `proj_name`.
-- **Assignments**:
-  - `event`: `create_video_folders`
-  - `proj_name`: `={{ $json.name }}`
-- **Include Other Fields**: True
-
-### 16. Merge (Merge Node)
-- **Purpose**: Combines data from multiple sources.
-- **Mode**: Combine
-- **Combine By**: Combine By Position
-
-### 17. Get Key (Postgres Node)
-- **Purpose**: Retrieves a decrypted secret key from the vault.
-- **Query**: `SELECT decrypted_secret as key FROM vault.decrypted_secrets ds WHERE ds.id = '0431bc58-c323-44ea-8f8c-ddacbabe28e9'`
-- **Operation**: Execute Query
-
-### 18. Dropbox (Dropbox Node)
-- **Purpose**: Lists folders in Dropbox based on a dynamic path derived from task data and folder IDs.
-- **Resource**: Search
-- **Filters**:
-  - `path`: `={{ ... }}` (Dynamic path construction)
-- **Authentication**: OAuth2
-
-### 19. Copy Template Folders (AWS Lambda Node)
-- **Purpose**: Invokes an AWS Lambda function to copy template folders, passing task and project details.
-- **Function**: `arn:aws:lambda:us-east-2:905418350485:function:video_automation`
-- **Payload**: `={{ ... }}` (JSON payload with `source_id`, `path`, `project_name`, `key`)
-
-### 20. Wait2 (Wait Node)
-- **Purpose**: Pauses execution for a short duration.
-
-### 21. Airtable2 (Airtable Node)
-- **Purpose**: Updates an Airtable record to indicate that video template folders have been created.
-- **Base**: NEW Live Task Tracking
-- **Table**: All Live Tasks
-- **Operation**: Update Record
-- **Columns**:
-  - `id`: `={{ $('Format').item.json.recId }}`
-  - `TaskID`: `={{ $('Format').item.json.taskId }}`
-  - `Video Template Folders`: `true`
-
-### 22. If Video Squad (Filter Node)
-- **Purpose**: Filters tasks based on whether they belong to the "video" squad or related tags/fields.
-- **Conditions**:
-  - Tags contain "video" OR
-  - Custom field `423fe36b-7833-4b75-8685-51143b675dbe` equals "1fb2955d-3a0a-4c0b-b12d-4ebd237a12b1" OR
-  - Tags contain "mto" OR
-  - Task name contains "Video"
-
-### 23. If2 (If Node)
-- **Purpose**: Checks for the existence of a Dropbox Folder ID from various sources.
-- **Conditions**:
-  - Dropbox Folder ID exists
-
-### 24. Check for comms_plan Tag (Filter Node)
-- **Purpose**: Filters tasks to identify those with the "comms_plan" tag.
-- **Conditions**:
-  - Tags contain "comms_plan"
-
-### 25. Get Accounts (Airtable Node)
-- **Purpose**: Retrieves account information from Airtable based on the ClickUp Folder ID.
-- **Base**: Mmmm Brains (The Master Brain)
-- **Table**: Accounts
-- **Operation**: Search Records
-- **Filter by Formula**: `={ClickUp Folder ID}="<ClickUp Folder ID>"`
-
-### 26. Switch (Switch Node)
-- **Purpose**: Routes the workflow based on whether a "C-Squad Contact(s)" field is present.
-- **Rules**:
-  - If "C-Squad Contact(s)" field exists
-
-### 27. Get Employee (Airtable Node)
-- **Purpose**: Retrieves employee information from Airtable based on the "C-Squad - Preferred (T)" field from the account data.
-- **Base**: Employee Info
-- **Table**: Employee directory
-- **Operation**: Search Records
-- **Filter by Formula**: `={Name} = "<C-Squad Contact(s)>"`
-
-### 28. Tag User Message (Slack Node)
-- **Purpose**: Sends a Slack message to a specific user, tagging them, when a "comms_plan" tag is found and a C-Squad contact is identified.
-- **Text**: "Hey <@{{ $json['Slack User ID Number'] }}>, A Clickup Task with the tag \"comms_plan\" has been submitted. Please take a look..."
-- **Channel**: `C07DY5ED4G3`
-- **Send As User**: Comms Plan Submitted Bot
-
-### 29. Generic Message (Slack Node)
-- **Purpose**: Sends a generic Slack message to the channel when a "comms_plan" tag is found but no specific C-Squad contact is identified.
-- **Text**: "A Clickup Task with the tag \"comms_plan\" has been submitted. Please take a look... PS: The \"C-Squad\" preferred field on the Clickup Task did not mention who from the C-Squad should be tagged..."
-- **Channel**: `C07DY5ED4G3`
-- **Send As User**: Comms Plan Submitted Bot
-
-### 30. Remove "Download Video Reminder" projects1 (Filter Node)
-- **Purpose**: Filters out tasks related to "Download Video Reminder" projects and ensures a specific custom field exists.
-- **Conditions**:
-  - Name does not contain "Download Video Reminder" AND
-  - Custom field `e713b55c-8a45-479f-b565-8f035276db6e` exists
-
-### 31. If4 (If Node)
-- **Purpose**: Checks if a specific Dropbox folder ID exists in the custom fields.
-- **Conditions**:
-  - Custom field `e713b55c-8a45-479f-b565-8f035276db6e` exists
-
-### 32. Get DB Folder ID from ShareURL (HTTP Request Node)
-- **Purpose**: Retrieves metadata from Dropbox using a shared link to get a folder ID.
-- **URL**: `https://api.dropboxapi.com/2/sharing/get_shared_link_metadata`
-- **Method**: POST
-- **Body Parameters**:
-  - `url`: `={{ $json.custom_fields.find(field=>field.id==\"e713b55c-8a45-479f-b565-8f035276db6e\").value }}`
-- **Authentication**: Predefined Credential Type (Dropbox OAuth2)
-
-### 33. Dropbox2 (Dropbox Node)
-- **Purpose**: Searches for a folder in Dropbox based on the task name, after removing emojis and trimming whitespace.
-- **Resource**: Search
-- **Query**: `={{ $('Check if Not Archived').first().json.name.replace(/[\\p{Emoji_Presentation}\\p{Extended_Pictographic}]/gu,'').trimStart().trimEnd() }}`
-- **Filters**:
-  - `path`: `=/Church Media Company Team Folder/2. Client Accounts/{{ $('Check if Not Archived').first().json.folder.name }}`
-  - `file_categories`: `folder`
-- **Authentication**: OAuth2
-
-### 34. If3 (If Node)
-- **Purpose**: Checks if a Dropbox Folder ID can be obtained either from the Dropbox API or by searching within Dropbox.
-- **Conditions**:
-  - Dropbox Folder ID exists
-
-### 35. Stay w/ Branch 1 (Merge Node)
-- **Purpose**: Merges data, prioritizing the second input.
-
-### 36. Edit Fields2 (Set Node)
-- **Purpose**: Extracts and formats the `Go Live Date` from the ClickUp task's text content into a specific format.
-- **Assignments**:
-  - `go_live`: `={{JSON.stringify(((inputString) => {...})($json.text_content))}}`
-
-### 37. If1 (If Node)
-- **Purpose**: Checks if the `go_live` field has content and if a Dropbox Folder ID is available.
-- **Conditions**:
-  - `go_live` is not empty AND
-  - Dropbox Folder ID exists
-
-### 38. Postgres3 (Postgres Node)
-- **Purpose**: Inserts or updates a record in the `go_live_dates` table with the task ID and formatted go-live date.
-- **Table**: go_live_dates
-- **Operation**: Upsert
-- **Columns**:
-  - `task_id`: `={{ $('Get CU Task').item.json.id }}`
-  - `go_live_date`: `={{ $json.formattedDate.toDateTime().toUTC().toISO() }}`
-- **Skip on Conflict**: True
-
-### 39. No Operation, do nothing1 (No Op Node)
-- **Purpose**: A placeholder node that performs no action.
-
-### 40. Postgres1 (Postgres Node)
-- **Purpose**: Upserts data into the `project_folders` table, storing Dropbox folder information and task association.
-- **Table**: project_folders
-- **Operation**: Upsert
-- **Columns**:
-  - `id`: `={{ ... }}` (Dropbox Folder ID)
-  - `name`: `={{ ... }}` (Dropbox Folder Name)
-  - `task_id`: `={{ $('Get CU Task').item.json.id }}`
-  - `path_display`: `={{ ... }}` (Formatted path display)
-
-### 41. Update Airtable Record w/o Go Live (Airtable Node)
-- **Purpose**: Updates an Airtable record with task details, excluding the `Go Live Date`.
-- **Base**: NEW Live Task Tracking
-- **Table**: All Live Tasks
-- **Operation**: Update Record
-- **Columns**: (Similar to "Update Airtable Record" but without `Go Live Date`)
-
-### 42. Delete Airtable Record (Airtable Node)
-- **Purpose**: Deletes an Airtable record if the task is marked as archived.
-- **Base**: NEW Live Task Tracking
-- **Table**: All Live Tasks
-- **Operation**: Delete Record
-- **Record ID**: `={{ $('Format').first().json.recId }}`
-
-### 43. Merge3 (Merge Node)
-- **Purpose**: Combines data from the `Check for comms_plan Tag` and `Remove "Download Video Reminder" projects1` nodes.
-- **Mode**: Combine
-- **Combine By**: Combine By Position
-
-### 44. Execute Workflow (Execute Workflow Node)
-- **Purpose**: Executes another workflow (Search Assignees API) to find relevant assignees.
-- **Workflow ID**: `FqUltzQvzxGiCqyk`
-- **Mode**: Each
-
-### 45. No Operation, do nothing (No Op Node)
-- **Purpose**: A placeholder node that performs no action.
-
-### 46. Manual Trigger (Webhook Node)
-- **Purpose**: This node serves as a manual trigger for the workflow, with a different path for manual enrichment.
-- **Path**: `/enrich-record-manual`
-- **Method**: POST
-
-### 47. Filter (Filter Node)
-- **Purpose**: Filters incoming data from the manual trigger, likely to ensure necessary fields are present.
-- **Conditions**:
-  - `recId` exists AND
-  - `taskId` exists
-
-### 48. If (If Node)
-- **Purpose**: Checks if the `Go Live Date` field in the ClickUp task data is not empty. This is a duplicate check for the earlier "If" node.
-- **Conditions**:
-  - `Go Live Date` is not empty
-
-### 49. Update Airtable Record (Airtable Node)
-- **Purpose**: Updates an Airtable record with various fields from ClickUp, including `Go Live Date`. (This appears to be a duplicate of the earlier "Update Airtable Record" node, possibly for a different branch of logic or a mistake.)
-
-### 50. If1 (If Node)
-- **Purpose**: Checks if the `go_live` field has content and if a Dropbox Folder ID is available. (Duplicate of an earlier "If1" node.)
-- **Conditions**:
-  - Length of `go_live` > 2 AND
-  - Dropbox Folder ID exists
-
-### 51. Re-Up Clickup Task Data (Set Node)
-- **Purpose**: Re-fetches ClickUp task data.
-- **JSON Output**: `={{ $('Get CU Task').item.json }}`
-
-### 52. Merge3 (Merge Node)
-- **Purpose**: Combines data from the `Set Custom Fields` and `Re-Up Clickup Task Data` nodes.
-
-### 53. Check for comms_plan Tag (Filter Node)
-- **Purpose**: Filters tasks to identify those with the "comms_plan" tag. (Duplicate of an earlier "Check for comms_plan Tag" node.)
-- **Conditions**:
-  - Tags contain "comms_plan"
-
-### 54. Remove "Download Video Reminder" projects1 (Filter Node)
-- **Purpose**: Filters out tasks related to "Download Video Reminder" projects and ensures a specific custom field exists. (Duplicate of an earlier "Remove "Download Video Reminder" projects1" node.)
-- **Conditions**:
-  - Name does not contain "Download Video Reminder" AND
-  - Custom field `e713b55c-8a45-479f-b565-8f035276db6e` exists
-
-### 55. Get Accounts (Airtable Node)
-- **Purpose**: Retrieves account information from Airtable based on the ClickUp Folder ID. (Duplicate of an earlier "Get Accounts" node.)
-- **Base**: Mmmm Brains (The Master Brain)
-- **Table**: Accounts
-- **Operation**: Search Records
-- **Filter by Formula**: `={ClickUp Folder ID}="<ClickUp Folder ID>"`
-
-### 56. Switch (Switch Node)
-- **Purpose**: Routes the workflow based on whether a "C-Squad Contact(s)" field is present. (Duplicate of an earlier "Switch" node.)
-- **Rules**:
-  - If "C-Squad Contact(s)" field exists
-
-### 57. Get Employee (Airtable Node)
-- **Purpose**: Retrieves employee information from Airtable based on the "C-Squad - Preferred (T)" field from the account data. (Duplicate of an earlier "Get Employee" node.)
-- **Base**: Employee Info
-- **Table**: Employee directory
-- **Operation**: Search Records
-- **Filter by Formula**: `={Name} = "<C-Squad Contact(s)>"`
-
-### 58. Tag User Message (Slack Node)
-- **Purpose**: Sends a Slack message to a specific user, tagging them, when a "comms_plan" tag is found and a C-Squad contact is identified. (Duplicate of an earlier "Tag User Message" node.)
-- **Text**: "Hey <@{{ $json['Slack User ID Number'] }}>, A Clickup Task with the tag \"comms_plan\" has been submitted. Please take a look..."
-- **Channel**: `C07DY5ED4G3`
-- **Send As User**: Comms Plan Submitted Bot
-
-### 59. Generic Message (Slack Node)
-- **Purpose**: Sends a generic Slack message to the channel when a "comms_plan" tag is found but no specific C-Squad contact is identified. (Duplicate of an earlier "Generic Message" node.)
-- **Text**: "A Clickup Task with the tag \"comms_plan\" has been submitted. Please take a look... PS: The \"C-Squad\" preferred field on the Clickup Task did not mention who from the C-Squad should be tagged..."
-- **Channel**: `C07DY5ED4G3`
-- **Send As User**: Comms Plan Submitted Bot
-
-## Data Flow
-
-The primary flow starts with a webhook trigger, followed by data formatting and enrichment. Conditional logic then determines whether to update Airtable with go-live dates, create Dropbox folders via AWS Lambda, or trigger Slack notifications based on task tags. There are significant redundancies in some of the later nodes, suggesting potential for optimization.
-
-## Error Handling
-
-- **ClickUp Node (`Get CU Task`)**: Configured to "Continue on Error Output" and has retry settings.
-- **Airtable Nodes**: Have retry settings and "Continue on Error" for some operations.
-- **Dropbox Nodes**: Have "Continue on Error" enabled.
-- **AWS Lambda Node**: Has "Continue on Error" enabled.
-
-## Authentication
-
-- **HookDeck**: Uses a signature for verification.
-- **ClickUp**: Uses an API token (`TheSquad`).
-- **Airtable**: Uses API tokens (`New Live Task Tracking`, `Jacob Airtable`).
-- **Dropbox**: Uses OAuth2 credentials (`Jacob Dropbox`).
-- **AWS Lambda**: Uses AWS credentials (`Lambda`).
-- **Postgres**: Uses database credentials (`SquadData`).
-- **Slack**: Uses an API token (`Slack`).
-```
+The workflow is triggered by a manual webhook or a HookDeck trigger, initiating a series of data retrieval, filtering, and updating operations.
+
+### 1. Manual Trigger
+*   **Type**: Webhook Trigger
+*   **Path**: `/enrich-record-manual`
+*   **Method**: POST
+*   **Purpose**: Manually triggers the workflow to enrich a record.
+
+### 2. HookDeck Trigger
+*   **Type**: Webhook Trigger
+*   **Path**: `/enrich-record`
+*   **Method**: POST
+*   **Purpose**: Triggered by HookDeck, likely for automated events like task creation.
+
+### 3. Filter
+*   **Type**: Filter
+*   **Purpose**: Filters incoming data based on the presence of `recId` and `taskId` in the query parameters.
+
+### 4. Format1
+*   **Type**: Set
+*   **Purpose**: Extracts and formats `recId`, `taskId`, and `time_estimate` from the incoming webhook payload.
+
+### 5. Format2
+*   **Type**: Set
+*   **Purpose**: Extracts and formats `recId` and `taskId` from the incoming query parameters.
+
+### 6. Format
+*   **Type**: Set
+*   **Purpose**: Formats `recId`, `taskId`, and `time_estimate` for downstream processing.
+
+### 7. Airtable
+*   **Type**: Airtable
+*   **Operation**: Retrieves a record from Airtable using the `recId`.
+
+### 8. Get CU Task
+*   **Type**: ClickUp
+*   **Operation**: Fetches task details from ClickUp using the `taskId`.
+
+### 9. Merge1
+*   **Type**: Merge
+*   **Purpose**: Combines data from the Airtable and ClickUp Get nodes.
+
+### 10. Execute Workflow
+*   **Type**: Execute Workflow
+*   **Workflow ID**: `FqUltzQvzxGiCqyk` (Search Assignees API)
+*   **Purpose**: Executes a sub-workflow to search for assignees based on task data.
+
+### 11. No Operation, do nothing
+*   **Type**: No Operation
+*   **Purpose**: A placeholder node, likely for branching logic or debugging.
+
+### 12. Check if Not Archived
+*   **Type**: If
+*   **Condition**: Checks if the `archived` field is `false`.
+*   **Purpose**: Controls the workflow path for tasks that are not archived.
+
+### 13. Delete Airtable Record
+*   **Type**: Airtable
+*   **Operation**: Deletes a record from Airtable based on the `recId` obtained from the 'Format' node.
+*   **On Error**: Continues with regular output.
+
+### 14. Stay w/ Branch 1
+*   **Type**: Merge
+*   **Purpose**: Merges data from different branches of the workflow.
+
+### 15. If4
+*   **Type**: If
+*   **Condition**: Checks if a Dropbox Folder ID exists in the `custom_fields` of the ClickUp task.
+*   **Purpose**: Determines the next step based on whether a Dropbox Folder ID is available.
+
+### 16. Get DB Folder ID from ShareURL
+*   **Type**: HTTP Request
+*   **URL**: `https://api.dropboxapi.com/2/sharing/get_shared_link_metadata`
+*   **Method**: POST
+*   **Purpose**: Retrieves metadata for a Dropbox shared link.
+
+### 17. Dropbox2
+*   **Type**: Dropbox
+*   **Resource**: Search
+*   **Purpose**: Searches for a folder in Dropbox using the task's name.
+
+### 18. Edit Fields2
+*   **Type**: Set
+*   **Purpose**: Extracts and formats the "GoLive Date" from the task's text content.
+
+### 19. If1
+*   **Type**: If
+*   **Conditions**:
+    *   Checks if the length of `go_live` data is greater than 2.
+    *   Checks if a Dropbox Folder ID (obtained from either Get DB Folder ID or Dropbox2) is present.
+*   **Purpose**: Controls the workflow path for tasks with GoLive dates and a valid Dropbox Folder ID.
+
+### 20. Update Airtable Record
+*   **Type**: Airtable
+*   **Operation**: Updates an Airtable record with various task details, including tags, client information, dates, and Dropbox Folder ID.
+
+### 21. Update Airtable Record w/o Go Live
+*   **Type**: Airtable
+*   **Operation**: Updates an Airtable record with task details, excluding the "Go Live Date".
+
+### 22. Postgres3
+*   **Type**: PostgreSQL
+*   **Operation**: Inserts or updates a `go_live_dates` record in the PostgreSQL database with the task ID and formatted Go Live date.
+
+### 23. Get Accounts
+*   **Type**: Airtable
+*   **Operation**: Searches for account information in Airtable based on the ClickUp Folder ID.
+
+### 24. Switch
+*   **Type**: Switch
+*   **Condition**: Checks if the `C-Squad Contact(s)` field is present in the account data.
+*   **Purpose**: Routes the workflow based on whether a C-Squad contact is assigned.
+
+### 25. Get Employee
+*   **Type**: Airtable
+*   **Operation**: Searches for employee information in Airtable based on the preferred C-Squad contact.
+
+### 26. Tag User Message
+*   **Type**: Slack
+*   **Purpose**: Sends a Slack message to the identified C-Squad user, notifying them of a new comms\_plan task.
+
+### 27. Generic Message
+*   **Type**: Slack
+*   **Purpose**: Sends a generic Slack message to the PM channel when a comms\_plan task is submitted without a specific C-Squad contact.
+
+### 28. Check for comms_plan Tag
+*   **Type**: Filter
+*   **Condition**: Checks if the task tags contain "comms\_plan" (case-insensitive).
+*   **Purpose**: Filters tasks that require a Slack notification for comms\_plan submissions.
+
+### 29. Remove "Download Video Reminder" projects1
+*   **Type**: Filter
+*   **Conditions**:
+    *   Filters out tasks where the name contains "Download Video Reminder".
+    *   Ensures a specific custom field (`e713b55c-8a45-479f-b565-8f035276db6e`) exists.
+*   **Purpose**: Excludes specific types of tasks from further processing.
+
+### 30. If Video Squad
+*   **Type**: If
+*   **Conditions**: Checks if the task belongs to the "Video Squad" based on tags or custom fields.
+*   **Purpose**: Controls workflow execution for video-related tasks.
+
+### 31. Edit Fields
+*   **Type**: Set
+*   **Purpose**: Sets specific fields for the "create_video_folders" event, including the project name.
+
+### 32. Dropbox
+*   **Type**: Dropbox
+*   **Operation**: Lists folders in Dropbox based on the obtained Folder ID and project name.
+
+### 33. Get Key
+*   **Type**: PostgreSQL
+*   **Operation**: Executes a SQL query to retrieve a decrypted secret key from the vault.
+
+### 34. Copy Template Folders
+*   **Type**: AWS Lambda
+*   **Function**: `video_automation`
+*   **Payload**: Contains details about the source, path, project name, and key for copying template folders.
+*   **Purpose**: Initiates an AWS Lambda function to automate the copying of template folders.
+
+### 35. Wait2
+*   **Type**: Wait
+*   **Purpose**: Pauses the workflow execution for a specified duration.
+
+### 36. Airtable2
+*   **Type**: Airtable
+*   **Operation**: Updates an Airtable record to mark that "Video Template Folders" have been created.
+
+### 37. Postgres1
+*   **Type**: PostgreSQL
+*   **Operation**: Upserts data into the `project_folders` table in PostgreSQL, storing folder information and task IDs.
+
+### 38. Sticky Note21
+*   **Type**: Sticky Note
+*   **Content**: Provides guidance on checking for archived status, merging client and task data, responding to the webhook, and deleting records if archived.
+
+### 39. Sticky Note22
+*   **Type**: Sticky Note
+*   **Content**: Details on getting Dropbox Folder ID from share links and updating Airtable records with additional metadata.
+
+### 40. Sticky Note25
+*   **Type**: Sticky Note
+*   **Content**: Information about searching clients and employees via the SIS1 Endpoint.
+
+### 41. Sticky Note24
+*   **Type**: Sticky Note
+*   **Content**: Explains the process of checking for "comms\_plan" tags and sending Slack notifications.
+
+### 42. Sticky Note
+*   **Type**: Sticky Note
+*   **Content**: Links to the Airtable trigger for viewing.
+
+### 43. Sticky Note26
+*   **Type**: Sticky Note
+*   **Content**: Refers to "Video Templates".
+
+### 44. No Operation, do nothing1
+*   **Type**: No Operation
+*   **Purpose**: A placeholder node.
+
+## Data Flow Summary
+
+The workflow generally follows this path:
+1.  **Trigger**: Receives data via webhook.
+2.  **Initial Formatting**: Extracts key IDs (`recId`, `taskId`) and other relevant data.
+3.  **Data Enrichment**: Fetches task details from ClickUp, account information from Airtable, and potentially employee data.
+4.  **Conditional Logic**: Branches based on task status (archived or not), presence of specific tags ("comms\_plan"), or task type (video-related).
+5.  **Dropbox/Folder Operations**: Retrieves Dropbox folder IDs and, for video tasks, potentially copies template folders using AWS Lambda.
+6.  **Database Updates**: Stores processed data, like folder information and Go Live dates, in PostgreSQL.
+7.  **Airtable Updates**: Updates Airtable records with the enriched and processed data.
+8.  **Notifications**: Sends Slack messages for specific events, such as comms\_plan task submissions.
+9.  **Error Handling**: Includes options to continue on error for certain nodes, allowing the workflow to proceed even if some steps fail.
