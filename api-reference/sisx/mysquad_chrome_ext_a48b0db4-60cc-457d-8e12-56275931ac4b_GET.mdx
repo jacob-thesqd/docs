@@ -1,0 +1,215 @@
+---
+title: "mySquad Chrome Ext"
+description: "This workflow orchestrates interactions initiated by a Chrome extension webhook, updating tasks and statuses in ClickUp and Postgres, and managing project data dynamically. It accommodates task creation, updates, status changes, and comment management in an automated manner."
+api: "GET /a48b0db4-60cc-457d-8e12-56275931ac4b"
+---
+
+<Card title="mySquad Chrome Ext" icon="link" href="https://sisx.thesqd.com/workflow/exligJ220LIy2xbR" arrow="true" cta="Click here"></Card>
+
+<RequestExample>
+
+```bash Request
+curl --request GET \
+  --url https://sisx.thesqd.com/webhook/a48b0db4-60cc-457d-8e12-56275931ac4b
+```
+
+</RequestExample>
+
+## Trigger
+### Webhook
+Listens for HTTP GET requests on the specified path to initiate the process flow. It captures the request with query parameters, primarily `taskId`, which inform subsequent operations in updating task details and managing comments.
+
+---
+
+## Node: Webhook
+- **Purpose:** Acting as the trigger, it receives incoming extension requests.
+- **Parameters:**
+  - `path`: `"a48b0db4-60cc-457d-8e12-56275931ac4b"`
+  - Response Mode: `"responseNode"` to respond after processing.
+- **Operation:**
+  - Waits for HTTP GET requests at the specified URL, capturing query parameters and request headers for use in downstream nodes.
+
+---
+
+## Node: Postgres (task info retrieval)
+- **Purpose:** Fetch detailed task information from database based on provided `taskId`.
+- **Parameters:**
+  - `query`: Executes a complex SQL query that retrieves task metadata, status history, tags, time estimates, assignments, and more.
+  - `operation`: `"executeQuery"`
+- **Operation:**
+  - Runs the SQL query with the `$json.query.taskId` parameter to compile comprehensive task details including status, tags, time metrics, assignment history, etc.
+
+---
+
+## Node: Postgres8 (list details)
+- **Purpose:** Get list name and account info related to the task's list.
+- **Parameters:**
+  - SQL query joining tasks, lists, and folders tables to determine list name and account info for the specific task.
+  - `operation`: `"executeQuery"`
+- **Operation:**
+  - Uses `$json.query.taskId` to find list and folder details for contextual data enrichment.
+
+---
+
+## Node: Edit Fields (Project Cap Details)
+- **Purpose:** Prepare project capacity and related info for display or further processing.
+- **Parameters:**
+  - Assigns static and JSON-derived data (e.g., `church`, `cap`, `active_tasks`, etc.) into a structured object.
+  - This step simplifies downstream access to project capacity metrics such as `active_tasks`, `mmq_max`, and visual styling info like `bar_color`.
+- **Operation:**
+  - Sets project capacity display parameters based on initial data.
+
+---
+
+## Node: Postgres3 (Project Info)
+- **Purpose:** Fetch list and folder name for the task.
+- **Parameters:**
+  - SQL that joins the task with lists and folders to get list name and folder name.
+  - `operation`: `"executeQuery"`
+- **Operation:**
+  - Uses the task's `taskId` to determine the project list and folder name, facilitating contextual understanding.
+
+---
+
+## Node: Edit Fields2 (Project Data)
+- **Purpose:** Render project information for user interface or logging.
+- **Parameters:**
+  - Sets project-related data such as `project_cap`, `church`, and `active_tasks` derived from previous nodes.
+- **Operation:**
+  - Organizes project size, church, and capacity display parameters.
+
+---
+
+## Node: Postgres1 (Status, Time, and Assignment Historical Data)
+- **Purpose:** Compile latest status, due date, time estimates, and department info from historical data.
+- **Parameters:**
+  - Executes an extensive SQL with CTEs gathering latest statuses, due dates, estimates, project folders, departments, and time logs for the task.
+  - `operation`: `"executeQuery"`
+- **Operation:**
+  - Aggregates various historical and current task metrics to provide a snapshot of current state.
+
+---
+
+## Node: Edit Fields3 (Task info update)
+- **Purpose:** Format and prepare project info for display or transmission.
+- **Parameters:**
+  - Converts timestamps to local timezone strings, compiles status timelines, assignee history, and key dates.
+- **Operation:**
+  - Processes raw data into human-readable or UI-friendly formats, including date formatting and sorting.
+
+---
+
+## Node: ClickUp (Update Task Status)
+- **Purpose:** Update the task's status in ClickUp (currently disabled).
+- **Parameters:**
+  - `taskId`: `{{ $json.body.taskId }}`
+  - `operation`: `"update"`
+  - `updateFields`: `{"status": "{{ $json.body.preferences.changeStatus.status }}" }`
+  - credentials: `"TheSquad"`
+- **Operation:**
+  - Intended to change task status based on extension preferences; currently disabled.
+
+---
+
+## Node: Webhook2 (Review Status Change)
+- **Purpose:** React to status change requests triggered outside workflow to modify task tags and comments.
+- **Parameters:**
+  - `path`: `"reviewed"`
+  - `httpMethod`: `"POST"`
+  - Response Mode: `"lastNode"`
+- **Operation:**
+  - Listens for external review triggers to adjust task tags or annotations accordingly.
+
+---
+
+## Node: HTTP Request (Remove Tag)
+- **Purpose:** Remove a specified tag from the task in ClickUp.
+- **Parameters:**
+  - URL: `"https://api.clickup.com/api/v2/task/{{ $json.body.taskId }}/tag/{{ $json.tagRemove }}"`
+  - `method`: `"DELETE"`
+  - Authorization headers: `"{{ $json.body.clickupAccessToken }}"`
+- **Operation:**
+  - Deletes a tag as specified, e.g., removing "queued" tag.
+
+---
+
+## Node: HTTP Request3 (Add Tag)
+- **Purpose:** Add a specified tag to the task.
+- **Parameters:**
+  - URL: `"https://api.clickup.com/api/v2/task/{{ $json.body.taskId }}/tag/{{ $json.tagAdd }}"`
+  - `method`: `"POST"`
+  - Authorization headers: `"{{ $json.body.clickupAccessToken }}"`
+- **Operation:**
+  - Attaches tags to the task for tagging workflow management.
+
+---
+
+## Node: Webhook3 (Add to Queue)
+- **Purpose:** Initiate task add-to-queue operation.
+- **Parameters:**
+  - `path`: `"add-to-queue"`
+  - `httpMethod`: `"PATCH"`
+  - Response mode: `"responseMode": "lastNode"`
+- **Operation:**
+  - Receives external requests to enqueue tasks into scheduling queues.
+
+---
+
+## Node: HTTP Request2 (Delete Tag)
+- **Purpose:** Remove a specific tag from task in ClickUp.
+- **Parameters:**
+  - URL: `"https://api.clickup.com/api/v2/task/{{ $json.body.taskId }}/tag/{{ $json.tagRemove }}"`
+  - `method`: `"DELETE"`
+  - Authorization: `"{{ $json.body.clickupAccessToken }}"`
+- **Operation:**
+  - Removes tags based on operational conditions.
+
+---
+
+## Node: HTTP Request1 (Add Tag)
+- **Purpose:** Add a tag to the task.
+- **Parameters:**
+  - URL: `"https://api.clickup.com/api/v2/task/{{ $json.body.taskId }}/tag/{{ $json.tagAdd }}"`
+  - `method`: `"POST"`
+  - Authorization: `"{{ $json.body.clickupAccessToken }}"`
+- **Operation:**
+  - Adds tags to update task state.
+
+---
+
+## Node: No Operation (do nothing)
+- **Purpose:** Acts as a placeholder when no action is needed, based on conditional logic.
+- **Parameters:** None
+- **Operation:** Placeholder, proceeds as a pass-through.
+
+---
+
+## Node: HTTP Request4 (Update Task Status)
+- **Purpose:** Change task status in ClickUp.
+- **Parameters:**
+  - URL: `"https://api.clickup.com/api/v2/task/{{ $json.body.taskId }}"`
+  - `method`: `"PUT"`
+  - Body: `{"status": "{{ $json.body.preferences.changeStatus.status }}"}`
+  - Authorization header with `"{{ $json.body.clickupAccessToken }}"`
+- **Operation:** Updates task to new status.
+
+---
+
+## Node: Respond to Webhook (respond after processing)
+- **Purpose:** Send confirmation or response back to the webhook caller.
+- **Parameters:** Default response settings.
+- **Operation:** Final step to confirm webhook processing completion.
+
+---
+
+## Node: Merge
+- **Purpose:** Combine multiple data streams for subsequent steps.
+- **Parameters:**
+  - Mode: `"combine"` or `"chooseBranch"` depending on context.
+- **Operation:** Consolidates data for downstream nodes.
+
+---
+
+**Summary:**
+
+This workflow listens for GET requests from a Chrome extension, uses the provided `taskId` to fetch detailed task info, tags, status history, and other metadata from Postgres. It updates task tags and statuses in ClickUp applying business rules based on incoming preferences, such as changing statuses, adding/removing tags, and commenting. It also manages project capacity displays and handles queued task operations, ensuring all data is formatted for UI or further processing steps. The architecture allows for dynamic updates, external review triggers, and task management automation based on extension interactions.
