@@ -1,0 +1,240 @@
+---
+title: "MMQ (Webhook4 - GET)"
+description: "This API triggers an event when a GET request is made to the '/logo' endpoint, using a webhook trigger. The workflow processes related task data, interacts with Postgres to retrieve project and task details, and responds accordingly."
+api: "GET /logo"
+---
+
+## Workflow Overview
+
+This workflow is triggered when a GET request is made to the `/logo` endpoint via the webhook node. It then performs a series of operations including querying Postgres for project assignment and status details, updating task statuses in ClickUp, handling multiple conditional branches, and responding to the webhook call with relevant data. The system manages task states from queued, in progress, to completed, with interactions involving task assignment, status updates, and data aggregation.
+
+---
+
+## Request Example
+
+<RequestExample>
+
+```bash Request
+curl --request GET --url https://sisx.thesqd.com/webhook/logo
+```
+
+</RequestExample>
+
+---
+
+## 1. Webhook
+
+This node acts as the initial trigger, listening for GET requests on the `/logo` path, and responding via the `responseNode`. It sets the foundation for subsequent tasks triggered by this event.
+
+- Parameters:
+  - **path**: `"logo"` – The URL path to listen for GET requests.
+  - **responseMode**: `"responseNode"` – The node responsible for sending the response.
+  - **httpMethod**: `["GET"]` – The method type.
+
+---
+
+## 2. Sticky Note (Logo)
+
+Serves as a visual marker within the workspace indicating this segment relates to the logo process.
+
+- Content: `# Logo`
+- Appearance: Color code 2, width 1000, height 320.
+
+---
+
+## 3. Convert to File
+
+Transforms base64 encoded data into binary file format for further processing or storage.
+
+- Parameters:
+  - **operation**: `"toBinary"` – Convert source data to binary.
+  - **sourceProperty**: `"base64"` – The property containing base64 data.
+
+---
+
+## 4. Respond to Webhook8
+
+Sends a binary response back to the initial webhook call, confirming receipt and processing of the data.
+
+- Response Mode: Responds with binary data.
+
+---
+
+## 5. Switch4
+
+Routes execution based on the evaluation of the previous step, primarily managing task state transitions involving play/pause actions.
+
+- Rules:
+  - Condition for `"Queue"`: Checks whether task’s active state has changed with relevant queue logic.
+  - Condition for `"Pause"` or `"Play"`: Based on the action received (`pause` or `play`).
+
+---
+
+## 6. Edit Fields9 (Set task_id, status, active)
+
+Sets key properties for task tracking within subsequent steps.
+
+- Assignments:
+  - **task_id**: `"{{ $json.id }}"`
+  - **status**: `"on hold"` (from previous states)
+  - **active**: `false` (initially paused)
+
+---
+
+## 7. Postgres14
+
+Executes a complex SQL query to generate future dates and compute capacity, managing task scheduling, due dates, and resource allocation.
+
+- Key Functionality:
+  - Calls several materialized views for latest status, due date, and time estimates.
+  - Generates future dates through `get_future_dates`.
+  - Computes capacities considering employee schedules, off-times, and blackouts.
+  - Filters tasks based on their activity status, due dates, department, and assignee's capacity.
+- Important SQL Elements:
+  - Multiple Common Table Expressions (`WITH` clauses) for latest status, assignee, due date, etc.
+  - Complex join logic with multiple relevant tables.
+  - Filters by department, time estimates, and business days.
+- Credentials: `"SquadData"`.
+
+---
+
+## 8. Respond to Webhook7
+
+Sends a simple JSON response indicating the task was processed.
+
+- Response body: `{"tasks_found": false}`
+
+---
+
+## 9. Merge10 (Branching)
+
+Chooses data from multiple inputs, facilitating decision points or parallel processes based on previous steps.
+
+---
+
+## 10. Edit Fields12 (Set task info, due date)
+
+Updates task data with the latest status, due date, and activity status from previous processes.
+
+- Assignments:
+  - **task_id**: `"{{ $json.id }}"`
+  - **status**: `"{{ $json.status.status }}"`
+  - **active**: `true`
+  - **due_date**: `"{{ $json.due_date.toDateTime('ms').format('yyyy-MM-dd') }}"`
+
+---
+
+## 11. Postgres13
+
+Handles detailed task and project info, updating the `aa_log` for queue placement or status change. This operation runs asynchronously to avoid blocking.
+
+- Operation:
+  - Log action `"reorder_queue"` with input data.
+  - Associates with account info via `"$('Postgres2').first().json.account"`.
+
+---
+
+## 12. Summarized Data Aggregation
+
+Multiple `Set` and `Merge` nodes gather, combine, and prepare task data for subsequent conditional logic and updates.
+
+---
+
+## 13. Switch5 (Play/Pause logic)
+
+Routes actions based on `body.action` to determine whether to pause or play tasks.
+
+- Conditions:
+  - `"pause"`: executes pause-related steps.
+  - `"play"`: executes play-related steps.
+
+---
+
+## 14. Edit Fields9 (Pause task)
+
+Sets the task status to `"on hold"` and marks it as inactive, logging this change.
+
+- Assignments:
+  - **task_id**: `"{{ $json.id }}"`
+  - **status**: `"on hold"`
+  - **active**: `false`
+
+---
+
+## 15. Postgres11
+
+Retrieves the latest activity history for a specific task, ordered by `changed_at` timestamp.
+
+- Focus: Ensures the most recent status change is captured for processing.
+
+---
+
+## 16. ClickUp (Update status to previous)
+
+Resets the status of the task in ClickUp to its previous state before a pause, allowing resume.
+
+- Parameters:
+  - **status**: `"{{ $json.status_before }}"`
+  - **dueDate**: Sets due date if necessary.
+
+---
+
+## 17. Edit Fields12 (Update task attributes after pause)
+
+Updates task with new due date, resets active flag, and status.
+
+- Assignments:
+  - **task_id**: `"{{ $json.id }}"`
+  - **status**: `"{{ $json.status.status }}"`
+  - **active**: `true`
+  - **due_date**: `"{{ $json.due_date.toDateTime('ms').format('yyyy-MM-dd') }}"`
+
+---
+
+## 18. Postgres16
+
+Refreshes materialized views to keep project states current and accurate.
+
+- Operation:
+  - `REFRESH MATERIALIZED VIEW active_projects_mv;`
+
+---
+
+## 19. Postgres17
+
+Runs a detailed SQL query gathering latest status, due dates, time estimates, tags, assignee info, activity history, and more to analyze project and task status, contributing to decision logic for task transition states.
+
+- Key Features:
+  - Multiple nested CTEs to retrieve latest data points.
+  - Joins with others for tags, activity, and date info.
+  - Final selection filters incomplete or active tasks.
+
+---
+
+## 20. Switch2 (Post-action)
+
+Routes to potentially different nodes based on outcome (e.g., success/failure) or further logical branching.
+
+---
+
+## 21. Webhook5 & Webhook6
+
+Handle responses for subsequent external communication or trigger webhooks after processing.
+
+---
+
+## 22. Additional Postgres Nodes
+
+Handle logging, task status updates, and other data persistence operations related to task progress, logging activity, and managing task queues.
+
+---
+
+## 23. Summary
+
+This entire process handles incoming GET requests triggered via webhook, manages task status updates, scheduling, and data aggregation across multiple table joins and views in Postgres, and communicates changes back via webhooks and task updates in ClickUp, ensuring tasks move appropriately through their lifecycle states with detailed state and activity tracking.
+
+---
+
+**Note**: All nodes and parameters are configured with specific credentials and query logic tailored to the database schema, ensuring accurate and real-time task management.
+
+---
