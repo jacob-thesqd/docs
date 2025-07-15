@@ -1,0 +1,166 @@
+---
+title: "mySquad Chrome Ext (Webhook2 - POST)"
+description: "This API endpoint is triggered by a webhook when a task is reviewed. It initiates a series of operations including updating task details in Postgres, interacting with ClickUp to update tags and status, and managing project data. The workflow incorporates multiple nodes to handle data processing, database queries, and external API calls, ensuring synchronized task and project management within the mySquad environment."
+api: "POST /reviewed"
+---
+
+<Card title="mySquad Chrome Ext" icon="link" href="https://sisx.thesqd.com/workflow/exligJ220LIy2xbR" arrow="true" cta="Click here"></Card>
+
+<RequestExample>
+
+```bash Request
+curl --request POST \
+  --url https://sisx.thesqd.com/webhook/reviewed \
+  --header "Content-Type: application/json" \
+  --data '{
+    "taskId": "86dv4y24e",
+    "userId": "89139343",
+    "preferences": {
+      "tags": {
+        "tagsToAdd": ["ready"],
+        "tagsToRemove": ["needs_assignment", "queued"]
+      },
+      "removeTags": {
+        "tags": ["ready"],
+        "enabled": false
+      },
+      "changeStatus": {
+        "status": "on hold",
+        "enabled": true
+      },
+      "leaveComment": {
+        "enabled": true,
+        "template": {
+          "name": "Test",
+          "content": "testing 123",
+          "templateId": "59523abd-abd9-4cea-8a33-3b3177962d05"
+        }
+      }
+    },
+    "clickupAccessToken": "89139343_6e06d7e8a29ebd0c74003451ae8a0585a29bb7b4d1d1dd3e5f045dcc39c59001"
+  }'
+```
+
+</RequestExample>
+
+---
+
+## Trigger Node
+### Webhook
+The initial trigger node listens for POST requests at the `/reviewed` path. When a task review is submitted, it activates the workflow, capturing the task-related data for further processing.
+
+- **Parameters:**
+  - `path`: "reviewed"
+  - `responseMode`: "lastNode" (Responds after the last node execution)
+  - `webhookId`: "54fa2528-0d96-4c59-ab77-b38a2541412b"
+
+---
+
+## Nodes Overview
+
+### 1. Webhook (Trigger)
+Receives the review data, initiates the process.
+
+### 2. Filter
+Checks if task preferences exist and if a task ID is provided to determine if subsequent actions should proceed.
+
+### 3. Postgres Nodes
+Perform various data queries:
+- Retrieve task details, status history, tags, time metrics, and associated project info.
+- Update task and project details based on the review.
+
+### 4. Merge & Set Nodes
+Consolidate data from multiple sources and prepare data for database updates and API calls.
+
+### 5. ClickUp Nodes
+Update task tags, status, and comments within ClickUp based on the review preferences.
+
+### 6. Respond to Webhook
+Finalize the webhook response after all processing.
+
+---
+
+## Node Details
+
+### Webhook
+**Purpose:** Triggers the workflow upon receiving a review POST request.
+
+**Parameters:**
+- Path: `reviewed`
+- Response Mode: `lastNode`
+- Webhook ID: `54fa2528-0d96-4c59-ab77-b38a2541412b`
+
+---
+
+### Filter
+**Purpose:** Validates the presence of task preferences and task ID in the incoming payload.
+
+**Parameters:**
+- Conditions:
+  - Existence of `$json.body.preferences`
+  - Existence of `$json.body.taskId`
+
+---
+
+### Postgres (Retrieve Task Data)
+**Purpose:** Executes a complex SQL query to gather detailed information about the task, including status history, tags, time spent, project info, and related metadata.
+
+**Query Highlights:**
+- Uses multiple CTEs to gather latest status, due date, time estimates.
+- Retrieves tags, department info, time tracking, and assignment history.
+- Limits the result to one record.
+
+**Credentials:** `SquadData`
+
+---
+
+### Postgres (Retrieve List & Folder Info)
+**Purpose:** Fetches the project list/folder name or folder ID associated with the task.
+
+**Query:** Looks up list and folder details based on `taskId`.
+
+**Credentials:** `SquadData - N. Cal Replica`
+
+---
+
+### Postgres (Update Log Entry)
+**Purpose:** Inserts or updates a log entry indicating the task has been queued or its status updated.
+
+**Purpose:** To record the review action and update the queue or logging data.
+
+**Credentials:** `SquadData`
+
+---
+
+### ClickUp Nodes
+**Purpose:** Update task tags, change task status, add comments, and remove tags based on the review preferences.
+
+- `ClickUp` (update tags)
+- `ClickUp3` (add 'queued' tag)
+- `ClickUp2` (update status to 'open' and remove specific assignee tags)
+- `ClickUp6` (add comment with review details)
+
+---
+
+### Set Nodes
+**Purpose:** Prepare data objects for database insertion, updating project display info, and managing task details.
+
+- `Edit Fields`, `Edit Fields2`, `Edit Fields3`, `Edit Fields4`, `Edit Fields5`, `Edit Fields6`, `Edit Fields7`
+
+These nodes standardize and format various pieces of data such as project info, status timelines, and date fields, ensuring consistent entries into the database.
+
+---
+
+### Webhook Responses
+- `Respond to Webhook1`: Responds once processing completes.
+- `Webhook3`: Handles adding tasks to queue, if necessary.
+
+---
+
+### Additional Operations
+Other nodes (e.g., `Split Out`, `Merge`, `Active Project Check`) handle auxiliary data manipulations, message handling, and API calls to external systems.
+
+---
+
+## Summary
+This webhook-driven process orchestrates comprehensive management of task reviews, updating task status and tags in ClickUp, recording data in Postgres, and ensuring project details and statuses are synchronized across systems. The workflow employs multiple nodes for data validation, querying, and updating, enabling a seamless review processing pipeline for mySquad's project management ecosystem.
