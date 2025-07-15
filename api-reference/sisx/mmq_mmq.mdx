@@ -1,0 +1,236 @@
+--- 
+title: "MMQ (Webhook - GET)"
+description: "This API handles incoming GET requests from a webhook, processes database queries to retrieve related tasks and account info, and responds with the relevant data or status messages. It is used for managing task status and associated data in the system."
+api: "GET /mmq"
+---
+
+## Workflow Overview
+
+This workflow is triggered by incoming HTTP GET requests on the `/mmq` endpoint via a webhook node. It then executes multiple database queries (PostgreSQL nodes) to retrieve tasks, account info, and their statuses, involving decision points with switches and filters, and interacts with external systems such as ClickUp. Responses are provided back through webhook response nodes, and database updates or queries are performed to manage the task states and logs.
+
+---
+
+## Request Example
+
+<RequestExample>
+
+```bash
+curl --request GET \
+  --url https://sisx.thesqd.com/api/mmq
+```
+
+</RequestExample>
+
+---
+
+## Webhook
+
+### Webhook
+Listens for GET and PATCH requests at `/mmq`. Response mode set to `responseNode`, it responds with data processed in subsequent nodes, with support for multiple HTTP methods.
+
+---
+
+## Nodes
+
+### Postgres5
+Executes a query to select the folder name and account number from related tables for a given `task_id`.
+
+- Query:
+```sql
+SELECT
+  cf.name,
+  cf.account
+FROM public.clickup_folders cf
+JOIN public.clickup_lists cl ON cl.folder = cf.id
+JOIN public.tasks t ON t.list_id = cl.id
+WHERE t.task_id = '{{ $json.query.id }}'
+```
+
+- Parameters: No special options.
+- Credentials: `SquadData - N. Cal Replica`
+- Purpose: To retrieve folder and account info based on task ID.
+
+---
+
+### Switch2
+Routes execution based on presence/absence of `query.id` and `query.account`.
+
+- Two rules:
+  - If `query.id` exists and `query.account` does not exist, go to "Get Account1".
+  - Else, if `query.id` does not exist and `query.account` exists, go to "Get Account1".
+- Fallback output: "extra"
+
+---
+
+### Get Account1
+Sets the `account` parameter for downstream nodes from the `query.account` parameter of the webhook query string.
+
+- Assign: `account = {{ $json.query.account }}`
+
+Purpose: Provides account info for further queries.
+
+---
+
+### Postgres7
+Fetches detailed related task data including status, assignees, tags, due date, etc., for a specific account.
+
+- Query:
+```sql
+WITH task_base AS (
+  -- filter tasks, join tables, exclude archived or deleted tasks
+  ...
+),
+filtered_tasks AS (
+  -- exclude tasks with certain tags
+  ...
+),
+latest_status AS (
+  -- fetch latest status change per task
+  ...
+),
+latest_assignee AS (
+  -- fetch latest assignee per task
+  ...
+),
+latest_due_date AS (
+  -- fetch latest due date per task
+  ...
+),
+task_time_tracking AS (
+  -- sum total time tracked per task
+  ...
+),
+current_tags AS (
+  -- fetch current tags, responsible department, exclude 'aa_exclude' tags
+  ...
+),
+employee_assignees AS (
+  -- get associated employee departments
+  ...
+)
+SELECT
+  -- select task info with various joins
+  ...
+FROM tasks t
+JOIN latest_status ls ON t.task_id = ls.task_id
+LEFT JOIN latest_assignee la ON t.task_id = la.task_id
+LEFT JOIN latest_due_date ldd ON t.task_id = ldd.task_id
+LEFT JOIN task_time_tracking ttt ON t.task_id = ttt.task_id
+LEFT JOIN current_tags ct ON ct.task_id = t.task_id
+LEFT JOIN employee_assignees ea ON t.task_id = ea.task_id
+WHERE cf.account = {{ $json.account.toNumber() }}
+  AND LOWER(ls.status_after) != 'closed'
+  AND t.task_id NOT IN (SELECT id FROM task_deletions)
+  AND (t.task_archived IS NULL OR t.task_archived = false)
+  AND t.task_id NOT IN (
+    -- exclude certain tags and dependencies
+  )
+ORDER BY aal.queue_num ASC, ldd.due_date_after ASC, t.created_at ASC;
+```
+
+- Purpose: To generate a comprehensive task list with status, tags, and assigned personnel based on the account.
+
+---
+
+### Postgres12
+Checks how many active tasks exist for the given account and their details using a stored function `get_account_task_stats`.
+
+- Query:
+```sql
+SELECT * FROM get_account_task_stats({{ $json.account }})
+JOIN accounts a ON a.account = {{ $json.account }}
+```
+
+- Purpose: To verify account capacity and current usage.
+
+---
+
+### Respond to Webhook5
+Sends JSON response with task summary and status info back to the requester.
+
+- Response body:
+```json
+{
+  "cap": 7,
+  "tasks": [
+    /* list of task objects with info such as name, tags, status, assigned, due date, etc. */
+  ],
+  "church": "All Saints Presbyterian Church",
+  "account": 3389,
+  "active_tasks": 5
+}
+```
+
+- Purpose: To communicate task statuses and associated account details.
+
+---
+
+### Merge (various nodes)
+Several merge nodes combine data streams, either by position or batch mode, to prepare for subsequent decision or update nodes.
+
+---
+
+### Respond to Webhook7
+Simply responds to the webhook with an acknowledgement, used after processing.
+
+---
+
+### Postgres16
+Refreshes materialized views to update task-related aggregates periodically, on a scheduled basis or on a trigger.
+
+```sql
+REFRESH MATERIALIZED VIEW active_projects_mv;
+```
+
+---
+
+### Postgres17
+Builds complex latest data for tasks (status, due date, time estimate, department, tags, etc.) using multiple CTEs, joins, and filtering by `account`.
+
+Purpose: To prepare detailed task data for analysis and processing, including filtering out specific tags and archiving.
+
+---
+
+### Switch5
+Routes execution based on the JSON body `action` value: `"pause"` or `"play"`.
+
+---
+
+### ClickUp
+Updates task status in ClickUp to "on hold" or revert.
+
+- Example:
+```json
+{
+  "id": "{{ $json.task_id }}",
+  "operation": "update",
+  "updateFields": {
+    "status": "on hold"
+  }
+}
+```
+
+- Purpose: To control task progress in ClickUp based on webhook actions.
+
+---
+
+### Edit Fields (Various Nodes)
+Set or update task parameters such as `status`, `active`, `due_date`, etc., using data from other nodes or previous states.
+
+---
+
+### Postgres Nodes for Task Updates
+Perform insert, update, or select operations on all relevant task logs, statuses, or related critical data points, often with retry logic or disabled state depending on context.
+
+---
+
+### Respond to Webhook8 and Webhook9
+Final response nodes to acknowledge webhook requests after process completion.
+
+---
+
+## Summary
+
+This workflow orchestrates handling incoming GET requests at `/mmq`, performs multiple advanced database queries to fetch current task and account data, manipulates task statuses in external systems like ClickUp, and responds with relevant task summaries. The use of switches, filters, and merge nodes supports complex routing and data processing, essential for managing task states and account information in an automated, scalable manner.
+
+---
