@@ -1,0 +1,141 @@
+---
+title: "Task Dependency Handler (Webhook - POST)"
+description: "This API documentation covers a workflow that handles task dependencies upon receiving a POST request via webhook. It processes incoming data, interacts with Postgres databases to record task dependencies, and integrates with ClickUp to fetch task details. The workflow orchestrates splitting incoming data, updating dependencies, and responding accordingly."
+api: "POST /task-dependency-handler"
+---
+
+<Card title="Task Dependency Handler" icon="link" href="https://sisx.thesqd.com/workflow/wZtVQkO3PCjX5fZZ" arrow="true" cta="Click here"></Card>
+
+<RequestExample>
+
+```bash Request
+curl --request POST \
+  --url https://sisx.thesqd.com/webhook/task-dependency-handler \
+  --header 'Content-Type: application/json' \
+  --data-raw '{
+    "id": "a2cd649b-048f-4450-be4f-e6ce09c5dc88",
+    "name": "Webhook",
+    "type": "n8n-nodes-base.webhook",
+    "position": [780, 500],
+    "parameters": {
+      "path": "task-dependency-handler",
+      "responseMode": "responseNode"
+    }
+  }'
+```
+
+</RequestExample>
+
+---
+
+## Workflow Summary
+This workflow is triggered via a webhook POST request. It then processes task dependency data, splitting dependencies and linked tasks into individual processing streams. It updates the Postgres database with new dependency links, fetches task details from ClickUp, and finally, responds to the webhook call indicating success or failure.
+
+---
+
+## Webhook
+- Receives POST requests at `/task-dependency-handler`.
+- Parameters include `path` as `"task-dependency-handler"` and `responseMode` set to `"responseNode"` to define how the response is handled within n8n.
+
+---
+
+## Node: Postgres1
+- Inserts task dependencies into the `task_dependencies` table.
+- Uses parameters:
+  - `table`: `task_dependencies`
+  - `schema`: `public`
+  - `columns`: links the dependency (`depends_on`) with task (`task_id`)
+  - `matching mode`: define below
+  - `query batching`: `single`
+  - `skip on conflict`: true
+- Credentials: `SquadData`
+
+---
+
+## Node: Split Out1
+- Splits incoming JSON field `dependencies` into separate items for individual processing.
+- Parameters:
+  - `field to split out`: `dependencies`
+  - `include`: all other fields
+
+---
+
+## Node: Postgres2
+- Inserts linked task relations into the `task_dependencies` table.
+- Uses parameters:
+  - `columns`: links `linked_tasks.link_id` with `task_id`.
+  - Other configurations similar to Postgres1.
+- Credentials: `SquadData`
+
+---
+
+## Node: Split Out2
+- Splits linked tasks array into individual records for processing.
+
+---
+
+## Node: Filter1
+- Condition: checks if the JSON field `id` exists and is non-empty, filtering relevant records.
+- Used to filter tasks that are to be processed further.
+
+---
+
+## Node: Postgres3
+- Inserts subtask dependencies into the Postgres table.
+- Uses:
+  - link from `subtasks.id` to parent task `id`.
+  - same others as above.
+- Credentials: `SquadData`
+
+---
+
+## Node: Split Out3
+- Splits subtasks array into individual subtask records.
+
+---
+
+## Node: Edit Fields
+- Sets JSON output to the workflow's body (`$json.body`), prepping data for further use.
+
+---
+
+## Node: HTTP Request
+- Fetches task details from ClickUp API using task ID from processed data.
+- URL formatted as `https://api.clickup.com/api/v2/task/{{ $json.id }}`.
+- Authentication with `clickUpApi` credentials.
+- Query parameter: `include_subtasks` = `true`.
+
+---
+
+## Node: Switch
+- Conditionally routes data based on the presence of:
+  - `dependencies`
+  - `linked_tasks`
+  - `subtasks`
+- All matching conditions must be true for route to follow specific paths.
+- Fallback output: `extra`
+
+---
+
+## Node: Execution Data
+- Saves the task ID for future reference within execution context (`taskId: {{ $json.id }}`).
+
+---
+
+## Node: Respond to Webhook
+- Sends final response back to the webhook request, indicating process completion.
+
+---
+
+## Node: Merge
+- Merges various data streams such as task details, dependencies, and link updates for final processing or logging.
+
+---
+
+## Node: Webhook (Pin Data)
+- Stores the initial incoming webhook body containing the task info, including URL, list, folder, project, and task metadata.
+- Used for further reference in responses or audits.
+
+---
+
+This detailed process ensures task dependency relationships are accurately recorded, updated, and communicated upon receiving webhook notifications.
