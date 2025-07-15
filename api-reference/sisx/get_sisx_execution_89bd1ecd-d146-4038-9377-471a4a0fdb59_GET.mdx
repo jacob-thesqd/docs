@@ -1,0 +1,41 @@
+---
+title: "Get SISX Execution (Webhook - GET)"
+description: "This workflow starts with a webhook trigger that listens for incoming GET requests on a specific URL path. When triggered, it retrieves the execution details of an n8n workflow execution based on the provided query parameter 'id'."
+api: "GET /89bd1ecd-d146-4038-9377-471a4a0fdb59"
+---
+
+<Card title="Get SISX Execution" icon="link" href="https://sisx.thesqd.com/workflow/J7VLxREC56vkSG6U" arrow="true" cta="Click here"></Card>
+
+<RequestExample>
+
+```bash Request
+curl --request GET \
+  --url "https://your-n8n-instance.com/webhook/89bd1ecd-d146-4038-9377-471a4a0fdb59" \
+  --get \
+  --data-urlencode "id=5b2ea1be-eeec-4589-b9e7-069472a02c58"
+```
+
+</RequestExample>
+
+## 1. Webhook Trigger Node
+**Purpose:** Listens for incoming GET requests on the URL path "89bd1ecd-d146-4038-9377-471a4a0fdb59".
+- **Parameters:**
+  - `path`: `"89bd1ecd-d146-4038-9377-471a4a0fdb59"` — The webhook URL path to listen on.
+  - `options`: `{}` — Default options, no additional webhook options configured.
+  - `responseMode`: `"lastNode"` — After all nodes are executed, respond using the last node's output.
+- **Position:** `[0, 0]`
+- **Webhook ID:** `"89bd1ecd-d146-4038-9377-471a4a0fdb59"`
+
+## 2. n8n Node
+**Purpose:** Uses the n8n API to retrieve details of a specific execution based on the `id` provided in the GET request query parameter.
+- **Parameters:**
+  - `resource`: `"execution"` — Indicates that the operation targets execution data.
+  - `operation`: `"get"` — Specifies fetching details about a specific execution.
+  - `executionId`: `"={{ $json.query.id }}"` — Uses dynamic expression to get the `id` query parameter from the webhook request.
+  - `requestOptions`: `{}` — Default request options.
+- **Credentials:**
+  - Uses `n8nApi` credentials with ID `"EA3jDaOurIeSxLKW"` and name `"n8n account"`.
+- **Position:** `[360, 0]`
+
+## Workflow Summary
+This workflow is designed to be triggered via an external GET request to a specific webhook URL. Once triggered, it extracts the `id` parameter from the request query and retrieves the corresponding execution details from n8n’s system using its API. The response mode is configured to return the results from the last node after execution.
