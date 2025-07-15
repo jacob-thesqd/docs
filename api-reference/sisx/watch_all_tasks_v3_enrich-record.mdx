@@ -1,0 +1,229 @@
+---
+title: 'Watch All Tasks V3'
+description: 'This N8N workflow is triggered by a HookDeck webhook and processes tasks from ClickUp, updating Airtable records with relevant information. It handles creating project folders, managing go-live dates, and sending Slack notifications based on task tags.'
+api: "POST /enrich-record"
+---
+
+## Workflow Details
+
+- **Workflow ID**: `TLHsRBUWw3klQKo3`
+- **Server**: N/A (Assumed to be the N8N instance)
+- **Status**: Active
+- **Created**: November 26, 2024
+- **Last Updated**: June 10, 2025
+
+## Webhook Endpoint
+
+```
+POST https://sisx.thesqd.com/webhook/enrich-record
+```
+
+## Workflow Process
+
+### 1. HookDeck Trigger
+- **Path**: `enrich-record`
+- **Method**: POST
+- **Purpose**: This is the trigger node, receiving task data from HookDeck.
+
+### 2. Format 1 (Set)
+- **Purpose**: Formats incoming data to extract `recId`, `taskId`, and `time_estimate` from the request body.
+- **Assignments**:
+  - `recId`: `={{ $json.body.recId}}`
+  - `taskId`: `={{$json.body.taskId}}`
+  - `time_estimate`: `={{ $json.body.time_estimate }}`
+
+### 3. Format 2 (Set)
+- **Purpose**: Formats incoming data to extract `recId` and `taskId` from the request query parameters.
+- **Assignments**:
+  - `recId`: `={{ $json.query.recId }}`
+  - `taskId`: `={{ $json.query.taskId }}`
+
+### 4. Filter (Set)
+- **Purpose**: Filters incoming data, ensuring that `recId` and `taskId` exist in the query parameters.
+
+### 5. Format (Set)
+- **Purpose**: Formats the extracted `recId`, `taskId`, and `time_estimate` for further processing.
+- **Assignments**:
+  - `recId`: `={{ $json.recId }}`
+  - `taskId`: `={{ $json.taskId }}`
+  - `time_estimate`: `={{ $json.time_estimate >=0 ? $json.time_estimate : null }}`
+
+### 6. Check if Not Archived (If)
+- **Purpose**: Checks if the `archived` field is false. If true, it proceeds to delete the Airtable record.
+- **Conditions**:
+  - `archived` is false
+
+### 7. Airtable (Get All Live Tasks)
+- **Purpose**: Retrieves a record from Airtable using the `recId` obtained from the trigger.
+
+### 8. Get ClickUp Task (ClickUp)
+- **Purpose**: Fetches detailed information about a specific ClickUp task using the `taskId`.
+- **Parameters**:
+  - `task`: `={{ $json.taskId }}`
+  - `operation`: `get`
+
+### 9. Merge 1 (Merge)
+- **Purpose**: Combines the output from the "Airtable" node (if the task is not archived) and the "Get ClickUp Task" node.
+
+### 10. Sticky Note (Workflow Summary)
+- **Purpose**: Provides a summary of the workflow's initial steps: triggering from Airtable and initial data handling.
+
+### 11. Sticky Note 2 (Workflow Summary)
+- **Purpose**: Explains the importance of the `recId` and `taskId` for subsequent operations.
+
+### 12. Sticky Note 21 (Workflow Summary)
+- **Purpose**: Outlines the logic for checking if a task is archived, merging client and task data, and responding to the webhook.
+
+### 13. Sticky Note 22 (Workflow Summary)
+- **Purpose**: Details the process of obtaining a Dropbox Folder ID from a share link and updating Airtable records with additional metadata.
+
+### 14. Sticky Note 24 (Workflow Summary)
+- **Purpose**: Explains the check for the "comms_plan" tag and the subsequent Slack notification.
+
+### 15. Sticky Note 25 (Workflow Summary)
+- **Purpose**: Refers to an external endpoint for searching assignees.
+
+### 16. Sticky Note 26 (Workflow Summary)
+- **Purpose**: Indicates a section for handling "Video Templates".
+
+### 17. If 4 (If)
+- **Purpose**: Checks if a Dropbox folder ID can be retrieved from the "Get DB Folder ID from ShareURL" node. If not, it proceeds to the "Dropbox 2" node.
+- **Conditions**:
+  - A Dropbox folder ID exists in the custom fields.
+
+### 18. Get DB Folder ID from ShareURL (HTTP Request)
+- **Purpose**: Retrieves metadata from a Dropbox shared link to obtain a folder ID.
+- **URL**: `https://api.dropboxapi.com/2/sharing/get_shared_link_metadata`
+- **Method**: POST
+- **Body Parameters**:
+  - `url`: `={{ $json.custom_fields.find(field=>field.id==\"e713b55c-8a45-479f-b565-8f035276db6e\").value }}`
+
+### 19. Dropbox 2 (Dropbox)
+- **Purpose**: Searches for a folder in Dropbox using the cleaned task name.
+- **Query**: `={{ $('Check if Not Archived').first().json.name.replace(/[\\p{Emoji_Presentation}\\p{Extended_Pictographic}]/gu,'').trimStart().trimEnd() }}`
+- **Filters**:
+  - `path`: `=/Church Media Company Team Folder/2. Client Accounts/{{ $('Check if Not Archived').first().json.folder.name }}`
+  - `file_categories`: `folder`
+
+### 20. Stay w/ Branch 1 (Merge)
+- **Purpose**: A merge node used to choose a branch based on the previous condition.
+
+### 21. If 3 (If)
+- **Purpose**: Checks if the `recId` and `taskId` are present in the query parameters. If not, it proceeds to the "Dropbox 2" node.
+- **Conditions**:
+  - `recId` exists in query parameters.
+  - `taskId` exists in query parameters.
+
+### 22. Edit Fields 2 (Set)
+- **Purpose**: Extracts and formats the "Go Live Date" from the ClickUp task's text content.
+- **Assignments**:
+  - `=go_live`: Logic to find and parse the "GoLive Date" from `text_content`.
+
+### 23. If 1 (If)
+- **Purpose**: Checks if the `go_live` data is available and if a Dropbox folder ID has been found.
+- **Conditions**:
+  - `go_live` has a length greater than 2.
+  - A Dropbox folder ID is present.
+
+### 24. Postgres 3 (Postgres)
+- **Purpose**: Inserts or updates the `go_live_date` in the `go_live_dates` table in Postgres, linked by `task_id`.
+
+### 25. Update Airtable Record (Airtable)
+- **Purpose**: Updates an Airtable record with various task details, including project name, time tracked, and Dropbox folder ID. It attempts to include "Go Live Date" if available.
+- **Columns**: Maps ClickUp task data to Airtable fields.
+
+### 26. Update Airtable Record w/o Go Live (Airtable)
+- **Purpose**: Updates an Airtable record with task details, excluding the "Go Live Date" if it's not present.
+
+### 27. Check for comms_plan Tag (Filter)
+- **Purpose**: Filters tasks to identify those with the "comms_plan" tag.
+- **Conditions**:
+  - Task tags contain "comms_plan" (case-insensitive).
+
+### 28. Get Accounts (Airtable)
+- **Purpose**: Retrieves account information from Airtable based on the ClickUp Folder ID.
+
+### 29. Switch (Switch)
+- **Purpose**: Determines which Slack message to send based on whether a "C-Squad Contact(s)" is available.
+
+### 30. Get Employee (Airtable)
+- **Purpose**: Fetches employee information from Airtable based on the "C-Squad - Preferred (T)" field from the "Get Accounts" node.
+
+### 31. Tag User Message (Slack)
+- **Purpose**: Sends a Slack message to a specific user, tagging them and providing details about the "comms_plan" task submission.
+
+### 32. Generic Message (Slack)
+- **Purpose**: Sends a generic Slack message when a "comms_plan" task is submitted, as no specific user could be tagged.
+
+### 33. If Video Squad (Filter)
+- **Purpose**: Filters tasks based on whether they are related to "video" (via tags or custom fields).
+
+### 34. If 2 (If)
+- **Purpose**: Checks if a Dropbox folder ID exists, either from the share URL metadata or from the Dropbox search.
+- **Conditions**:
+  - Dropbox folder ID is available.
+
+### 35. Edit Fields (Set)
+- **Purpose**: Prepares data for creating video folders, setting the `event` to "create_video_folders" and `proj_name` from the task name.
+
+### 36. Dropbox (Dropbox)
+- **Purpose**: Lists the contents of a Dropbox folder, likely to identify template folders for copying.
+- **Path**: Dynamically determined based on the presence of folder IDs from previous steps.
+
+### 37. Get Key (Postgres)
+- **Purpose**: Retrieves a secret key from the `vault.decrypted_secrets` table in Postgres.
+
+### 38. Merge (Merge)
+- **Purpose**: Merges data from multiple sources, including Dropbox folder listings, the retrieved secret key, and task details, likely for processing by the AWS Lambda function.
+
+### 39. Wait 2 (Wait)
+- **Purpose**: Pauses execution, potentially to allow for asynchronous operations or to avoid rate limits.
+
+### 40. Airtable 2 (Airtable)
+- **Purpose**: Updates an Airtable record to mark that "Video Template Folders" have been created.
+
+### 41. Copy Template Folders (AWS Lambda)
+- **Purpose**: Invokes an AWS Lambda function to copy template folders in Dropbox, using parameters derived from the ClickUp task and other sources.
+- **Payload**: Contains details like `source_id`, `path`, `project_name`, and `key`.
+- **Function**: `arn:aws:lambda:us-east-2:905418350485:function:video_automation`
+
+### 42. Postgres 1 (Postgres)
+- **Purpose**: Upserts data into the `project_folders` table in Postgres, storing information about project folders and their associated task IDs.
+
+### 43. If 2 (If) - Re-evaluation
+- **Purpose**: This appears to be a duplicate or alternative check for the Dropbox folder ID, possibly for a different path in the workflow.
+
+### 44. Delete Airtable Record (Airtable)
+- **Purpose**: Deletes an Airtable record if the task was found to be archived.
+
+### 45. Merge 3 (Merge)
+- **Purpose**: Combines outputs from "Check for comms_plan Tag" and "Remove 'Download Video Reminder' projects1" nodes.
+
+### 46. Re-Up Clickup Task Data (Set)
+- **Purpose**: Re-fetches or prepares ClickUp task data for subsequent steps.
+
+### 47. No Operation, do nothing (No Op)
+- **Purpose**: A placeholder node that performs no action.
+
+### 48. No Operation, do nothing1 (No Op)
+- **Purpose**: Another placeholder node.
+
+## Data Flow
+
+HookDeck Trigger -> Format 1 -> Filter -> Format -> If -> Get ClickUp Task -> Merge 1 -> (Conditional logic for archiving, comms_plan, video squad) -> Dropbox/Airtable/Slack/Postgres/AWS Lambda operations.
+
+## Error Handling
+
+- **ClickUp Node**: Configured to "continueErrorOutput" and has "retryOnFail" enabled.
+- **Airtable Nodes**: Have "onError" set to "continueRegularOutput" and "retryOnFail" enabled.
+- **Dropbox Nodes**: Have "onError" set to "continueRegularOutput" and "alwaysOutputData" enabled.
+- **Postgres Nodes**: Have "onError" set to "continueRegularOutput".
+
+## Authentication
+
+- **HookDeck Trigger**: Implicitly handled via HookDeck.
+- **ClickUp API**: Authenticated using "TheSquad" credentials.
+- **Airtable API**: Authenticated using "New Live Task Tracking" and "Jacob Airtable" credentials.
+- **Dropbox OAuth2 API**: Authenticated using "Jacob Dropbox" credentials.
+- **AWS Lambda**: Authenticated using "Lambda" credentials.
+- **Slack API**: Authenticated using "Slack" credentials.
