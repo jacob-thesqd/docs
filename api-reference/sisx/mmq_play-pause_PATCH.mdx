@@ -1,0 +1,129 @@
+---
+title: "MMQ (Webhook3 - PATCH)"
+description: "This API endpoint handles PATCH requests triggered by the 'Webhook3'. It manages task status updates, interacts with Postgres and ClickUp, and processes task data for the 'MMQ' system."
+api: "PATCH /play-pause"
+---
+
+## Workflow Overview
+
+This API is triggered via a PATCH request sent to `/play-pause` through the Webhook3 node. The workflow primarily processes a task's play or pause action, updating task status in ClickUp, managing database entries in Postgres, and coordinating with associated logic for task state management and logging.
+
+---
+
+## Request Example
+
+<RequestExample>
+
+```bash Request
+curl --request PATCH \
+  --url https://sis1.thesqd.com/webhook/play-pause \
+  --header "Content-Type: application/json" \
+  --data '{
+    "action": "play",
+    "task_id": "86dv8juck"
+  }'
+```
+
+</RequestExample>
+
+---
+
+## Webhook3 (Trigger)  
+**Function:** Listens for PATCH requests on `/play-pause`, responding with process control for task play/pause actions.  
+**Parameters:**  
+- `path`: `"play-pause"`  
+- `httpMethod`: `"PATCH"`  
+- `responseMode`: `"responseNode"`  
+- `responseBody`: Not specifically configured, default to response node
+
+---
+
+## Switch5 (Route based on action type)  
+**Function:** Routes request based on the `"action"` field in the incoming body.  
+**Parameters:**  
+- Rules:  
+  - If `body.action` = `"pause"`, output branch `"pause"`  
+  - If `body.action` = `"play"`, output branch `"play"`  
+
+---
+
+## Edit Fields9 (Set task identifier and update status to "on hold")  
+**Function:** Sets `task_id`, updates task status to `"on hold"`.  
+**Parameters:**  
+- `task_id`: `"{{ $json.id }}"`
+- `status`: `"on hold"`  
+
+**Operation:** Updates task status in Postgres and prepares for further steps.
+
+---
+
+## Webhook (Main trigger)  
+**Function:** Receives initial PATCH request on `/play-pause`.  
+**Parameters:**  
+- `path`: `"play-pause"`  
+- `httpMethod`: `"PATCH"`  
+- `responseMode`: `"responseNode"`  
+
+---
+
+## ClickUp (Update task status to "on hold")  
+**Function:** Updates the task in ClickUp to prevent further actions or assign it a paused state.  
+**Parameters:**  
+- `id`: `"{{ $json.body.task_id }}"`
+- `operation`: `"update"`  
+- `updateFields`: `{ "status": "on hold" }`  
+
+**Credentials:** Uses `TheSquad` ClickUp API credentials.
+
+---
+
+## Switch2 (Manage task state transitions)  
+**Function:** Determines if the task is going to be paused or played based on `"action"` value.  
+**Parameters:**  
+- Rules:  
+  - If `body.action` = `"pause"`, branch `"pause"`  
+  - If `body.action` = `"play"`, branch `"play"`  
+
+---
+
+## Edit Fields11 (Set task_id, status, active state, and due date for resumption or pause)  
+**Function:** Prepare data for updating task status and related fields in Postgres.  
+**Parameters:**  
+- `task_id`: `"{{ $json.task_id }}"`
+- `status`: `"{{ $json.changes.to.status }}"`  
+- `active`: `true`
+- `due_date`: `"{{ $json.due_date.toDateTime('ms').format('yyyy-MM-dd') }}"`  
+
+**Operation:** Setup for logging and updating task status.
+
+---
+
+## Postgres13 (Log the update in `mmq_log`)  
+**Function:** Records the play or pause action in the database.  
+**Parameters:**  
+- `data`: JSON stringified object with relevant data  
+- `action`: either `"play"` or `"pause"` depending on the branch  
+- `account`: `"{{ $('Postgres2').first().json.account }}"`  
+
+**Credentials:** Uses `SquadData` database credentials.
+
+---
+
+## Webhook Handling & Response Nodes  
+**Function:** Respond with JSON acknowledgment or status as needed for successful operation completion.  
+**Parameters:**  
+- `respondWith`: `"json"`  
+- `responseBody`: `{"tasks_found": false}`  
+
+---
+
+## Additional Postgres & ClickUp interactions  
+**Function:** Further updates in related Postgres tables and ClickUp task status restorations or handling as per branch logic, involving multiple merge and set nodes to coordinate task states and communicate via Webhooks.  
+
+---
+
+## Summary
+
+This workflow manages a PATCH call to toggle task status between active and paused using the `Webhook3` trigger. It routes the action based on the `"action"` parameter, updating task statuses in ClickUp and Postgres, logging actions, and coordinating additional task management processes such as setting task parameters, updating related data, and responding back to the source. It ensures task state consistency across systems and handles logging and notifications as part of a comprehensive task control flow.
+
+---
