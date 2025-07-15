@@ -1,111 +1,162 @@
 ---
 title: "MMQ (Webhook - PATCH)"
-description: "This API documentation details how the MMQ workflow is triggered via a Webhook with PATCH method, and describes the sequence of nodes handling the request, interacting with Postgres databases, and updating tasks in ClickUp based on the received data."
+description: "This API triggers the MMQ workflow using a PATCH request to handle updates to tasks related to the Queued/MMQ process. It primarily responds to webhook triggers and manages task state changes, including interacting with Postgres and external services like ClickUp."
 api: "PATCH /mmq"
 ---
 
-<Card title="Link card" icon="link" href="https://sisx.thesqd.com/workflow/E10tRBL43E5QZ3we" arrow="true" cta="Click here">
-  MMQ
-</Card>
+<Card title="MMQ" icon="link" href="https://sisx.thesqd.com/workflow/E10tRBL43E5QZ3we" arrow="true" cta="Click here"></Card>
 
 <RequestExample>
 
 ```bash Request
-curl --request POST \
+curl --request PATCH \
   --url https://sisx.thesqd.com/webhook/mmq
 ```
 
 </RequestExample>
 
-# Workflow Overview
-This workflow listens for PATCH requests on the `/mmq` endpoint, processes task and account data from the database, and updates task statuses in ClickUp accordingly. It also manages task dependencies, handles Webhook responses, and logs all interactions in the database.
+---
 
-## Webhook Trigger
-### Webhook (n8n-nodes-base.webhook)
-Listens for PATCH/GET requests on path `mmq` with response mode set to `responseNode`. Activates upon receiving a PATCH request, initiating the sequence of nodes.
+## Trigger: Webhook
+The trigger for this workflow is a webhook endpoint listening on path "mmq" accepting GET and PATCH methods. When triggered, it initiates the processing sequence for task updates within the MMQ system.
 
-Parameters:
-- Path: `"mmq"`  
-- Multiple Methods: `[ "GET", "PATCH" ]`  
-- Response Mode: `"responseNode"`  
-- Response Behavior: Responds with a node specified in `Respond to Webhook` nodes.
+- Path: "mmq"
+- HTTP Methods: GET, PATCH
+- Response Mode: Use "responseNode" to send back responses based on further processing
+- Multiple Methods: true (supports both GET and PATCH)
+- Response: Managed through the "responseNode" during workflow execution
+
+## Node: Sticky Note ("# Logo")
+A visual annotation node indicating a section labeled "# Logo," primarily used for workflow organization.
+
+- Color: Blue (2)
+- Dimensions: Width 1000, Height 320
+- Content: "# Logo"
 
 ---
 
-## Nodes Sequence
+## Node: Webhook ("WebHook")
+This node captures incoming PATCH requests at "/mmq" and triggers the workflow.
 
-### Webhook (n8n-nodes-base.webhook)
-Receives incoming PATCH or GET request at `/mmq`, triggers subsequent nodes.
-
-### Switch2 (n8n-nodes-base.switch)
-Based on the query parameters, routes to either `Check if account has room` or proceeds to other nodes for task processing.
-
-Parameters:
-- Rules:
-  1. If `query.id` exists and `query.account` does not, route to `Check if account has room`.
-  2. Else, proceed to process account data.
-
-### Check if account has room (Postgres query)
-Verifies if the account associated with the task has capacity for additional tasks.
-Query:
-`SELECT * FROM get_account_task_stats({{ $json.account }}) JOIN accounts a ON a.account = {{ $json.account }}`
-
-Retrieves:
-- `cap`: max task capacity
-- `room`: remaining capacity
-- `active_tasks`: number of active tasks
-- Additional account info and contact data.
-
-### Respond to Webhook (n8n-nodes-base.respondToWebhook)
-Sends JSON response `{"tasks_found": false}` if no relevant task data is provided or after processing.
-
-### Get Account1 (Postgres query)
-Fetches account info such as `account`, `active_tasks`, and related details for further processing.
-
-### Main Data Processing
-
-#### Node: Postgres7
-Uses complex SQL with multiple CTEs to retrieve detailed task data, such as status, assignee, tags, due date, and project information, based on `account`.
-
-#### Node: Filter
-Filters out tasks with specific tags or statuses that should not be processed further, ensuring only relevant tasks are handled.
-
-#### Node: Merge2
-Combines task data from previous nodes for unified processing.
-
-#### Node: Edit Fields5
-Sets `cap` (capacity) and various task lists including active tasks, scheduled dates, and other metadata into the data payload.
-
-#### Node: Webhook5
-Responds with the current task data, providing structured task info back to the requester.
-
-#### Node: Postgres12
-Fetches detailed task info, including recent status changes, due dates, assigned users, and time tracking.
-
-#### Node: Postgres13
-Updates task logs with new data such as queue position, status, and timestamps.
-
-#### Node: ClickUp1
-Reverts task status in ClickUp to previous state (`status_before`).
-
-### Additional Task Action Nodes
-Involves updating task statuses, handling pausing/playing, reordering, and modifying task details based on the logic determined from previous steps. Nodes like `Switch4`, `Switch5`, and others route tasks based on the desired action (`pause`, `play`, or order changes).
-
-### Webhook3 (Handling Play/Pause)
-Receives PATCH requests at `/play-pause`, processes the action command (`pause` or `play`), and updates the task in ClickUp accordingly.
-
-### Webhook4, Webhook8, Webhook9
-Respond to specific Webhook calls with appropriate JSON, binary, or no content responses to confirm actions were completed.
-
-### Database Logging
-Nodes like `Postgres14`, `Postgres15`, `Postgres16`, and `Postgres17` handle logging, refresh materialized views, or update task statuses in the database to reflect current state.
-
-### Additional Task Management
-Nodes such as `Switch4`, `Switch5`, and `Filter` nodes route tasks based on their current status and trigger updates, reordering, or pausing/playing tasks in ClickUp.
+- Webhook ID: "39f76862-e004-479d-92d0-76297a0defa3"
+- Path: "mmq"
+- HTTP Methods: GET, PATCH
+- Response Mode: "responseNode"
+- Supports multiple methods: true
+- ResponseMode: "responseNode"
 
 ---
+
+## Node: Postgres ("Check if account has room")
+Queries account capacity and status with `"SELECT * FROM get_account_task_stats({{ $json.account }})"` joined with the accounts table to verify current task load and capacity.
+
+- Query: `"SELECT * FROM get_account_task_stats({{ $json.account }}) JOIN accounts a ON a.account = {{ $json.account }}"`.
+- Credentials: "SquadData - N. Cal Replica"
+- Always outputs data, even if query returns nothing (onError: continue)
+- Used to determine if account can accept more tasks
+
+---
+
+## Node: Switch ("Switch2")
+Routes processing based on the presence of task id or account info in incoming data.
+
+- Conditions:
+  - If `query.id` exists and `query.account` does not: route accordingly (e.g., to task handling)
+  - Else, perform alternative branch
+- Fallback output: "extra"
+
+---
+
+## Node: Webhook ("Webhook - PATCH")
+The primary webhook triggering the workflow with PATCH method on "mmq".
+
+- Path: "mmq"
+- Methods: GET, PATCH
+- Response Mode: "responseNode"
+- Multiple: true
+
+---
+
+## Node: Postgres ("Get Account1")
+Retrieves the account data based on the parameter from the incoming webhook query or payload.
+
+- Query: `"SELECT {\"account\": \"{{ $json.query.account }}\"}"`
+- Output used for subsequent logic
+
+---
+
+## Node: Set ("Get Account1")
+Sets the account value from the webhook query data into the workflow context as `account`.
+
+- Assignments:
+  - `account: "{{ $json.query.account }}"`
+
+---
+
+## Nodes: Processing Tasks and Statuses (Various Postgres & Set nodes)
+Sequences that manage task states, including:
+
+- Loading current task data (`Postgres7`, `Postgres11`, etc.)
+- Updating task status in ClickUp (`ClickUp`, `ClickUp1`, `ClickUp4`)
+- Managing task queue and prioritization (`Postgres13`, `Postgres14`)
+- Handling task details, dates, and department info (`Postgres16`, `Postgres17`)
+- Logic branches for different task actions like pause/play, update, reorder, close, etc.
+
+### Example: Pause/Play actions
+- Nodes like `Switch4`, `Switch5`, process "pause" or "play" actions coming from webhook payloads.
+- Based on action, update task status in ClickUp and Postgres.
+- Set additional fields like due date and active status.
+
+---
+
+## Node: Webhook ("Respond to Webhook")
+Sends a JSON response indicating whether tasks were found or not.
+
+- Response Body: `{"tasks_found": false}`
+
+---
+
+## Node: Merge ("Merge2")
+Joins data streams related to tasks, consolidating incoming task info.
+
+---
+
+## Node: Postgres ("Postgres12")
+Loads tasks based on account and other criteria, enabling further processing of task data.
+
+- Query: Pulls current task info including related comments, updates, and history.
+
+---
+
+## Node: Webhook ("Webhook3")
+Simulates a webhook call for play/pause or task state updates via external triggers.
+
+- Path: "play-pause"
+- Method: PATCH
+- Payload includes `action`, `task_id`, `position`.
+
+---
+
+## Node: ClickUp ("ClickUp" / "ClickUp1" / "ClickUp4")
+Updates task status in the external ClickUp system based on workflow logic:
+
+- Fields updated: `status`, `dueDate`
+- Credentials: "TheSquad" API key
+- Example: Set status to "on hold" or revert to previous status
+
+---
+
+## Additional nodes
+Multiple Postgres nodes assist in refreshing views, recording history, and managing task queue order, such as:
+
+- `Postgres16` for refreshing materialized views
+- `Postgres17` for executing complex SQL queries involving task status and date logic
+- `Postgres18` for converting images or files when needed
+- `Postgres13`, `Postgres14` for updating logs and queue ordering dynamically
 
 ## Summary
-This workflow automates handling of task updates via PATCH requests on `/mmq`. It checks account capacities, updates task statuses in ClickUp, logs changes in Postgres, and manages task sequencing (ordering, pausing, resuming). It ensures that task state in the project management system reflects the latest information received through the webhook.
+This workflow handles task updates via a webhook trigger, coordinating information between Postgres, external task management systems (like ClickUp), and internal process queues. It supports pausing, playing, updating statuses, and managing task queue positions, ensuring data consistency across systems. It responds with status messages to webhook callers, enabling external systems to trigger and monitor task states.
 
 ---
+
+> **Note:** The detailed node configurations, SQL queries, and execution data illustrate the workflow's extensive data handling and conditional routing logic, ensuring precise task management aligned with external triggers and internal state changes.
