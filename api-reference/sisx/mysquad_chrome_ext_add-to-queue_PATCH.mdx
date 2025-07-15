@@ -1,0 +1,127 @@
+---
+title: "mySquad Chrome Ext (Webhook3 - PATCH)"
+description: "This workflow listens for incoming webhook triggers with a PATCH request to add tasks to the queue. It then processes task details, updates statuses, removes/adds tags in ClickUp, and updates related PostgreSQL entries accordingly, ensuring task progression and queuing logic are handled efficiently."
+api: "PATCH /add-to-queue"
+---
+
+<Card title="mySquad Chrome Ext" icon="link" href="https://sisx.thesqd.com/workflow/exligJ220LIy2xbR" arrow="true" cta="Click here"></Card>
+
+<RequestExample>
+
+```bash Request
+curl -X PATCH "https://sisx.thesqd.com/webhook/add-to-queue" \
+-H "Content-Type: application/json" \
+-d '{"id":"02f90c6f-09fb-4617-b2f5-401d0d094767"}'
+```
+
+</RequestExample>
+
+## Trigger: Webhook (Webhook3)
+- Listens on the path "add-to-queue" for PATCH requests.
+- Response mode: "lastNode" to relay the final output downstream.
+- Incoming payload: `{"id":"02f90c6f-09fb-4617-b2f5-401d0d094767","name":"Webhook3","type":"n8n-nodes-base.webhook"}` at position `[20,920]`.
+
+## Nodes Overview
+- The workflow primarily starts with the Webhook trigger, then branches into data processing, database updates, and tag management in ClickUp, followed by responses to the original webhook.
+
+---
+
+## Webhook (Webhook3)
+- **Purpose:** Receives PATCH requests containing the task ID to add to the queue.
+- **Parameters:** Path set to `"add-to-queue"`.
+- **Response Mode:** "lastNode" ensures the response is sent after all processing.
+
+---
+
+## Webhook (Webhook)
+- **Purpose:** Listens for incoming task-specific webhooks, particularly for further task status or tag updates.
+- **Important:** Internal API call tied to the initial webhook trigger; positioned at `[160,2700]`.
+
+---
+
+## PostgreSQL Nodes
+### Postgres
+- **Purpose:** Retrieves detailed task info including current status, tags, assignees, time estimates, created date, etc.
+- **Query:** Complex SQL query aggregating multiple subqueries to get the latest task status, tags, time spent, assignee histories, and other metadata based on the incoming `taskId`.
+- **Position:** `[900,2940]`.
+
+### Postgres8
+- **Purpose:** Retrieves list details, such as list name and associated account info.
+- **Query:** Determines list and folder names for the given task's list ID and folder.
+- **Position:** `[900,2680]`.
+
+### Postgres1
+- **Purpose:** Fetches latest status, due date, time estimates, project folder info, department, and created date for the task.
+- **Query:** Uses distinct on queries to get latest entries per task.
+- **Position:** `[-300,600]`.
+
+### Postgres2
+- **Purpose:** Retrieves employee details (name, department, email, clickup_id) for each assignee.
+- **Query:** Selects employee info based on assignee IDs.
+- **Position:** `[900,1800]`.
+
+### Postgres4
+- **Purpose:** Fetches existing statuses from a `clickup_statuses` table for tag/color management.
+- **Query:** Selects from `clickup_statuses` where color is not null.
+- **Position:** `[900,3180]`.
+
+### Postgres5
+- **Purpose:** Logs actions into `aa_log`, such as queuing actions.
+- **Query:** Inserts or updates queue info.
+- **Position:** `[640,840]`.
+
+---
+
+## Set Nodes (Edit Fields)
+### Edit Fields / Edit Fields2 / Edit Fields3 / Edit Fields4 / Edit Fields5 / Edit Fields6 / Edit Fields7
+- **Purpose:** Populate or update task data fields such as task ID, account, project info, status, time estimates, assignee info, and visual indicators.
+- **Example:** Updating queue numbers, status, and timestamps, formatting date/time for display, and preparing data for database updates or UI refresh.
+
+---
+
+## ClickUp Actions
+- **Update Task Status:** `ClickUp2` sets task status to "open" and removes assignees in the "design squad" or "video squad" from the task.
+- **Remove/Remove Tag:** `ClickUp3` removes the "queued" tag from the task.
+- **Add Tag:** `ClickUp5` adds the "queued" tag to the task.
+- **Post Comment:** (Disabled/Example) posts comments or retrieves comments for context.
+- **Update Tasks:** Functions update task fields like status, description, tags.
+- **Purpose:** These nodes manage tags and status in ClickUp based on queue operations.
+
+---
+
+## Webhook for Processing
+- **Webhook2 (Reviewed):** Listens on path `"reviewed"` with POST method.
+- **Purpose:** Capture review submissions or status updates.
+
+---
+
+## Conditional Logic (Switch)
+- **Purpose:** Routes processes based on whether change status, tags to add/remove, or leave comment are enabled.
+- **Conditions:** Checks `preferences.changeStatus.enabled`, presence of tags to add/remove, and comment enable flag.
+
+---
+
+## Other Nodes
+### Response Nodes
+- Respond to original webhook with confirmation or status.
+- **Nodes:** `Respond to Webhook1` at `[2800,2720]`.
+
+### Merge and Split Nodes
+- Used for combining data streams or splitting out tags for individual processing.
+- **Nodes:** `Merge`, `Merge1`, `Merge2`, `Merge3`, `Split Out`, `Split Out1`, `Split Out2`.
+
+---
+
+## Data Handling & Logic
+- **Queue Management:** Updates database tables (`aa_log`) with queued task info.
+- **Status Updates:** Synchronizes task `status`, `tags`, `assignees`, and related metadata in PostgreSQL and ClickUp.
+- **Tag Management:** Removes and adds tags based on preferences and task state.
+- **Time & Date Formatting:** Adjusts timestamps to CST for consistent display.
+- **Error Handling:** Continues on errors for some database nodes to ensure process flow.
+
+---
+
+## Summary
+This workflow automates queuing and status management of tasks via a webhook trigger, with extensive data aggregation from PostgreSQL, task updates in ClickUp, and status/tag synchronization. It ensures tasks are correctly queued, tagged, and tracked in external systems, providing real-time updates and logging.
+
+---
